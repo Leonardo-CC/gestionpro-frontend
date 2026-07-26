@@ -1,43 +1,21 @@
 from django.urls import path, include
-from rest_framework import routers, serializers, viewsets
-from django.apps import apps
+from rest_framework.routers import DefaultRouter
+from api.views import (
+    UsuariosViewSet, ProyectosViewSet, TareasViewSet, AsignacionesViewSet,
+    ComentariosTareaViewSet, ArchivosTareaViewSet, RegistroHorasViewSet,
+    HistorialPresupuestoViewSet, LogsAuditoriaViewSet
+)
 
-router = routers.DefaultRouter()
-
-# 1. Obtenemos todos los modelos que generó inspectdb en la app 'api'
-modelos = apps.get_app_config('api').get_models()
-
-# 2. Iteramos sobre cada tabla/modelo
-for modelo in modelos:
-
-    # Excluimos modelos internos o el modelo base de usuario si causa conflictos de permisos
-    if modelo.__name__ in ['LogEntry', 'Permission', 'Group', 'ContentType', 'Session']:
-        continue
-
-    # A) Autogenerar el Serializer dinámicamente
-    ClaseSerializer = type(
-        f'{modelo.__name__}Serializer',
-        (serializers.ModelSerializer,),
-        {
-            'Meta': type('Meta', (), {'model': modelo, 'fields': '__all__'}),
-            '__module__': __name__
-        }
-    )
-
-    # B) Autogenerar el ViewSet (CRUD completo) dinámicamente
-    ClaseViewSet = type(
-        f'{modelo.__name__}ViewSet',
-        (viewsets.ModelViewSet,),
-        {
-            'queryset': modelo.objects.all(),
-            'serializer_class': ClaseSerializer,
-            '__module__': __name__
-        }
-    )
-
-    # C) Registrar el endpoint en el router usando el nombre de la tabla en minúsculas
-    # Ejemplo: /proyectos/, /tareas/, /registro_horas/
-    router.register(modelo.__name__.lower(), ClaseViewSet)
+router = DefaultRouter()
+router.register(r'usuarios', UsuariosViewSet, basename='usuario')
+router.register(r'proyectos', ProyectosViewSet, basename='proyecto')
+router.register(r'tareas', TareasViewSet, basename='tarea')
+router.register(r'asignaciones', AsignacionesViewSet, basename='asignacion')
+router.register(r'comentarios', ComentariosTareaViewSet, basename='comentario')
+router.register(r'archivos', ArchivosTareaViewSet, basename='archivo')
+router.register(r'registro-horas', RegistroHorasViewSet, basename='registro-hora')
+router.register(r'historial-presupuesto', HistorialPresupuestoViewSet, basename='historial-presupuesto')
+router.register(r'logs-auditoria', LogsAuditoriaViewSet, basename='log-auditoria')
 
 urlpatterns = [
     path('', include(router.urls)),
