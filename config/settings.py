@@ -75,6 +75,8 @@ REST_FRAMEWORK = {
 CORS_ALLOW_ALL_ORIGINS = True
 
 SUPABASE_JWT_SECRET = env('SUPABASE_JWT_SECRET', default=None)
+SUPABASE_URL = env('SUPABASE_URL', default=None)
+SUPABASE_ANON_KEY = env('SUPABASE_ANON_KEY', default=None)
 
 ROOT_URLCONF = 'config.urls'
 

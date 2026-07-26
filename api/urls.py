@@ -3,7 +3,7 @@ from rest_framework.routers import DefaultRouter
 from api.views import (
     UsuariosViewSet, ProyectosViewSet, TareasViewSet, AsignacionesViewSet,
     ComentariosTareaViewSet, ArchivosTareaViewSet, RegistroHorasViewSet,
-    HistorialPresupuestoViewSet, LogsAuditoriaViewSet
+    HistorialPresupuestoViewSet, LogsAuditoriaViewSet, SignUpView, LoginView
 )
 
 router = DefaultRouter()
@@ -18,5 +18,7 @@ router.register(r'historial-presupuesto', HistorialPresupuestoViewSet, basename=
 router.register(r'logs-auditoria', LogsAuditoriaViewSet, basename='log-auditoria')
 
 urlpatterns = [
+    path('auth/signup/', SignUpView.as_view(), name='signup'),
+    path('auth/login/', LoginView.as_view(), name='login'),
     path('', include(router.urls)),
 ]

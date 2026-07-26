@@ -56,3 +56,80 @@ class LogsAuditoriaViewSet(viewsets.ModelViewSet):
     queryset = LogsAuditoria.objects.all()
     serializer_class = LogsAuditoriaSerializer
     permission_classes = [RoleBasedPermission]
+
+
+import requests
+from django.conf import settings
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.permissions import AllowAny
+
+class SignUpView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email = request.data.get('email')
+        password = request.data.get('password')
+        nombre = request.data.get('nombre', 'Nuevo Usuario')
+
+        if not email or not password:
+            return Response({"error": "Email y contraseña son requeridos."}, status=status.HTTP_400_BAD_REQUEST)
+
+        supabase_url = getattr(settings, 'SUPABASE_URL', None)
+        supabase_anon_key = getattr(settings, 'SUPABASE_ANON_KEY', None)
+
+        if not supabase_url or not supabase_anon_key:
+            return Response({"error": "Configuración de Supabase no encontrada en el servidor."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        headers = {
+            "apikey": supabase_anon_key,
+            "Content-Type": "application/json"
+        }
+        data = {
+            "email": email,
+            "password": password,
+            "options": {
+                "data": {
+                    "nombre": nombre
+                }
+            }
+        }
+
+        response = requests.post(f"{supabase_url}/auth/v1/signup", json=data, headers=headers)
+        if response.status_code >= 400:
+            return Response(response.json(), status=response.status_code)
+
+        return Response(response.json(), status=status.HTTP_201_CREATED)
+
+
+class LoginView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email = request.data.get('email')
+        password = request.data.get('password')
+
+        if not email or not password:
+            return Response({"error": "Email y contraseña son requeridos."}, status=status.HTTP_400_BAD_REQUEST)
+
+        supabase_url = getattr(settings, 'SUPABASE_URL', None)
+        supabase_anon_key = getattr(settings, 'SUPABASE_ANON_KEY', None)
+
+        if not supabase_url or not supabase_anon_key:
+            return Response({"error": "Configuración de Supabase no encontrada en el servidor."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        headers = {
+            "apikey": supabase_anon_key,
+            "Content-Type": "application/json"
+        }
+        data = {
+            "email": email,
+            "password": password
+        }
+
+        response = requests.post(f"{supabase_url}/auth/v1/token?grant_type=password", json=data, headers=headers)
+        if response.status_code >= 400:
+            return Response(response.json(), status=response.status_code)
+
+        return Response(response.json(), status=status.HTTP_200_OK)

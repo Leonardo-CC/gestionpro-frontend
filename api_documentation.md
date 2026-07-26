@@ -868,3 +868,98 @@ Registro de auditoría interna de acciones realizadas en el sistema (por ejemplo
 
 #### 4. Eliminar Log (`DELETE /api/logs-auditoria/{id}/`)
 *   **Response (204 No Content):** (Sin cuerpo).
+
+---
+
+## 3. Endpoints de Autenticación (Supabase Proxy)
+
+Para facilitar el desarrollo, pruebas y flujos desde clientes REST (como Postman o Swagger), la API expone endpoints que actúan de proxy hacia Supabase Auth para realizar registros e inicios de sesión.
+
+*   **Autenticación requerida:** Ninguna (Acceso libre/público).
+
+### 3.1 Registro de Usuario (`POST /api/auth/signup/`)
+Registra un nuevo usuario en Supabase Auth. Este proceso dispara de forma automática el Trigger de base de datos para sincronizar su perfil en la tabla `public.usuarios` con el rol por defecto `Miembro_Equipo`.
+
+#### Request Body (JSON)
+```json
+{
+  "email": "nuevo.usuario@example.com",
+  "password": "mi_password_segura",
+  "nombre": "Carlos Gómez"
+}
+```
+
+#### Respuestas
+*   **201 Created:** Registro exitoso en Supabase.
+```json
+{
+  "id": "4eedacbf-eb1d-46fc-9ae6-9c36d2ab695f",
+  "aud": "authenticated",
+  "role": "authenticated",
+  "email": "nuevo.usuario@example.com",
+  "email_confirmed_at": "2026-07-26T23:35:10Z",
+  "user_metadata": {
+    "nombre": "Carlos Gómez"
+  },
+  "identities": [
+    {
+      "id": "4eedacbf-eb1d-46fc-9ae6-9c36d2ab695f",
+      "user_id": "4eedacbf-eb1d-46fc-9ae6-9c36d2ab695f",
+      "identity_data": {
+        "email": "nuevo.usuario@example.com",
+        "sub": "4eedacbf-eb1d-46fc-9ae6-9c36d2ab695f"
+      },
+      "provider": "email",
+      "last_sign_in_at": "2026-07-26T23:35:10Z",
+      "created_at": "2026-07-26T23:35:10Z",
+      "updated_at": "2026-07-26T23:35:10Z"
+    }
+  ],
+  "created_at": "2026-07-26T23:35:10Z",
+  "updated_at": "2026-07-26T23:35:10Z"
+}
+```
+*   **400 Bad Request:** Formatos de email incorrectos, contraseña muy débil o datos requeridos faltantes.
+```json
+{
+  "error_description": "Password should be at least 6 characters"
+}
+```
+
+---
+
+### 3.2 Inicio de Sesión (`POST /api/auth/login/`)
+Autentica al usuario en Supabase Auth y retorna los tokens JWT correspondientes para ser incluidos en la cabecera `Authorization` de los endpoints del backend.
+
+#### Request Body (JSON)
+```json
+{
+  "email": "nuevo.usuario@example.com",
+  "password": "mi_password_segura"
+}
+```
+
+#### Respuestas
+*   **200 OK:** Retorna la información de la sesión y el token de acceso.
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "bearer",
+  "expires_in": 3600,
+  "refresh_token": "refresh_token_string",
+  "user": {
+    "id": "4eedacbf-eb1d-46fc-9ae6-9c36d2ab695f",
+    "email": "nuevo.usuario@example.com",
+    "user_metadata": {
+      "nombre": "Carlos Gómez"
+    }
+  }
+}
+```
+*   **400 Bad Request:** Credenciales inválidas o datos faltantes.
+```json
+{
+  "error": "invalid_grant",
+  "error_description": "Invalid login credentials"
+}
+```
