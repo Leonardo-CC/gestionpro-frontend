@@ -52,7 +52,7 @@ class SupabaseAuthAndRBACTests(TestCase):
             id_usuario=self.gerente_uuid,
             nombre="Gerente User",
             email="gerente@example.com",
-            rol="Gerente de Proyecto",
+            rol="Gerente_Proyecto",
             tarifa_hora=75.00,
             activo=True
         )
@@ -62,7 +62,7 @@ class SupabaseAuthAndRBACTests(TestCase):
             id_usuario=self.miembro_uuid,
             nombre="Miembro User",
             email="miembro@example.com",
-            rol="Miembro del Equipo",
+            rol="Miembro_Equipo",
             tarifa_hora=50.00,
             activo=True
         )

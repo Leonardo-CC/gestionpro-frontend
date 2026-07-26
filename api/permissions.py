@@ -6,11 +6,11 @@ class IsAdministrador(permissions.BasePermission):
 
 class IsGerenteProyecto(permissions.BasePermission):
     def has_permission(self, request, view):
-        return request.user and getattr(request.user, 'rol', None) == 'Gerente de Proyecto'
+        return request.user and getattr(request.user, 'rol', None) == 'Gerente_Proyecto'
 
 class IsMiembroEquipo(permissions.BasePermission):
     def has_permission(self, request, view):
-        return request.user and getattr(request.user, 'rol', None) == 'Miembro del Equipo'
+        return request.user and getattr(request.user, 'rol', None) == 'Miembro_Equipo'
 
 class IsEjecutivo(permissions.BasePermission):
     def has_permission(self, request, view):
@@ -20,8 +20,8 @@ class RoleBasedPermission(permissions.BasePermission):
     """
     Role-Based Access Control:
     - Administrador: Full access.
-    - Gerente de Proyecto: Full access.
-    - Miembro del Equipo: Read-only access generally, but can write comments, upload files, and log hours.
+    - Gerente_Proyecto: Full access.
+    - Miembro_Equipo: Read-only access generally, but can write comments, upload files, and log hours.
     - Ejecutivo: Read-only access to all endpoints.
     """
     def has_permission(self, request, view):
@@ -34,16 +34,16 @@ class RoleBasedPermission(permissions.BasePermission):
         if rol == 'Administrador':
             return True
             
-        # Gerente de Proyecto has full access
-        if rol == 'Gerente de Proyecto':
+        # Gerente_Proyecto has full access
+        if rol == 'Gerente_Proyecto':
             return True
             
-        # Safe methods are allowed for Miembro del Equipo and Ejecutivo
+        # Safe methods are allowed for Miembro_Equipo and Ejecutivo
         if request.method in permissions.SAFE_METHODS:
-            return rol in ['Miembro del Equipo', 'Ejecutivo']
+            return rol in ['Miembro_Equipo', 'Ejecutivo']
             
-        # Miembro del Equipo can write to Comentarios, Archivos, and RegistroHoras
-        if rol == 'Miembro del Equipo':
+        # Miembro_Equipo can write to Comentarios, Archivos, and RegistroHoras
+        if rol == 'Miembro_Equipo':
             view_name = view.__class__.__name__
             if view_name in ['ComentariosTareaViewSet', 'ArchivosTareaViewSet', 'RegistroHorasViewSet']:
                 return True
