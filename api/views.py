@@ -8,7 +8,8 @@ from api.serializers import (
     UsuariosSerializer, ProyectosSerializer, TareasSerializer,
     AsignacionesSerializer, ComentariosTareaSerializer,
     ArchivosTareaSerializer, RegistroHorasSerializer,
-    HistorialPresupuestoSerializer, LogsAuditoriaSerializer
+    HistorialPresupuestoSerializer, LogsAuditoriaSerializer,
+    UserSignUpSerializer, UserLoginSerializer
 )
 from api.permissions import RoleBasedPermission
 
@@ -65,9 +66,12 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 
+from drf_yasg.utils import swagger_auto_schema
+
 class SignUpView(APIView):
     permission_classes = [AllowAny]
 
+    @swagger_auto_schema(request_body=UserSignUpSerializer)
     def post(self, request):
         email = request.data.get('email')
         password = request.data.get('password')
@@ -106,6 +110,7 @@ class SignUpView(APIView):
 class LoginView(APIView):
     permission_classes = [AllowAny]
 
+    @swagger_auto_schema(request_body=UserLoginSerializer)
     def post(self, request):
         email = request.data.get('email')
         password = request.data.get('password')

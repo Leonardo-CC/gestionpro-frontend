@@ -49,3 +49,14 @@ class LogsAuditoriaSerializer(serializers.ModelSerializer):
     class Meta:
         model = LogsAuditoria
         fields = '__all__'
+
+
+class UserSignUpSerializer(serializers.Serializer):
+    email = serializers.EmailField(help_text="Email para el nuevo usuario en Supabase Auth")
+    password = serializers.CharField(write_only=True, min_length=6, help_text="Contraseña (mínimo 6 caracteres)")
+    nombre = serializers.CharField(required=False, default="Nuevo Usuario", help_text="Nombre completo del usuario")
+
+
+class UserLoginSerializer(serializers.Serializer):
+    email = serializers.EmailField(help_text="Email del usuario registrado")
+    password = serializers.CharField(write_only=True, help_text="Contraseña del usuario")
