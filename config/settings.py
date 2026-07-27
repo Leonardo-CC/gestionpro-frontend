@@ -72,6 +72,18 @@ REST_FRAMEWORK = {
     ),
 }
 
+SWAGGER_SETTINGS = {
+    'SECURITY_DEFINITIONS': {
+        'Bearer': {
+            'type': 'apiKey',
+            'name': 'Authorization',
+            'in': 'header',
+            'description': 'Autenticación por token JWT en formato: Bearer <tu_token>'
+        }
+    },
+    'USE_SESSION_AUTH': False,
+}
+
 CORS_ALLOW_ALL_ORIGINS = True
 
 SUPABASE_JWT_SECRET = env('SUPABASE_JWT_SECRET', default=None)
