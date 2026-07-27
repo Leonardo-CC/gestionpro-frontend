@@ -137,4 +137,20 @@ class LoginView(APIView):
         if response.status_code >= 400:
             return Response(response.json(), status=response.status_code)
 
-        return Response(response.json(), status=status.HTTP_200_OK)
+        resp_data = response.json()
+        
+        # Obtener el UUID del usuario logueado
+        user_id = resp_data.get('user', {}).get('id')
+        if user_id:
+            try:
+                from api.models import Usuarios
+                user_profile = Usuarios.objects.get(id_usuario=user_id)
+                # Inyectar el rol y nombre reales de la base de datos de negocio
+                resp_data['user']['rol'] = user_profile.rol
+                resp_data['user']['nombre'] = user_profile.nombre
+            except Usuarios.DoesNotExist:
+                # Fallback por defecto si aún no está sincronizado
+                resp_data['user']['rol'] = 'Miembro_Equipo'
+                resp_data['user']['nombre'] = 'Nuevo Usuario'
+
+        return Response(resp_data, status=status.HTTP_200_OK)
