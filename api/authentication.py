@@ -72,4 +72,12 @@ class SupabaseJWTAuthentication(authentication.BaseAuthentication):
         except Usuarios.DoesNotExist:
             raise exceptions.AuthenticationFailed('User does not exist in local database.')
 
+        # ASEGURAR PROPIEDADES DE AUTENTICACIÓN PARA DRF
+        # Forzamos los atributos que Django REST Framework busca internamente
+        user.is_authenticated = True
+        
+        # Opcional por seguridad si Django intenta verificar un campo 'is_active'
+        if hasattr(user, 'activo'):
+            user.is_active = user.activo
+
         return (user, token)

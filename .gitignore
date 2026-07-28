@@ -40,3 +40,17 @@ media/
 *.swp
 *.swo
 .DS_Store
+
+# Next.js
+/.next/
+/out/
+/build
+
+# Dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# Local env
+.env.local
+.env.*.local
