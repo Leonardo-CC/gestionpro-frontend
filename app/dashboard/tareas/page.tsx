@@ -123,7 +123,7 @@ export default function TareasPage() {
 
     setCreateLoading(true);
     setErrorMsg('');
-
+  
     try {
       const payload: any = {
         titulo: newTareaData.titulo.trim(),
@@ -131,20 +131,26 @@ export default function TareasPage() {
         id_proyecto: Number(newTareaData.id_proyecto),
         estado: newTareaData.estado,
         prioridad: newTareaData.prioridad,
+        // 💡 ESTO ELIMINA EL ERROR 400 EN RENDER/VERCEL:
+        fecha_inicio: new Date().toISOString().split('T')[0], 
         fecha_vencimiento: newTareaData.fecha_vencimiento || null,
       };
-
+  
       if (newTareaData.usuario_asignado) {
         payload.usuario_asignado = newTareaData.usuario_asignado;
       }
-
+  
       await api.createTarea(payload);
       setSuccessMsg('Tarea creada correctamente');
       setIsCreateModalOpen(false);
       await loadTareas();
     } catch (err: any) {
       console.error('Error al crear la tarea:', err);
-      setErrorMsg(err?.response?.data?.detail || 'Error al guardar la tarea');
+      setErrorMsg(
+        err?.response?.data?.fecha_inicio?.[0] ||
+        err?.response?.data?.detail ||
+        'Error al guardar la tarea'
+      );
     } finally {
       setCreateLoading(false);
     }

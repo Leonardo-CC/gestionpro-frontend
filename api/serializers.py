@@ -127,15 +127,18 @@ class ComentariosTareaSerializer(serializers.ModelSerializer):
 
     def get_usuario_nombre(self, obj):
         try:
-            # Si el modelo Comentario tiene FK a Usuario (ej. id_usuario o usuario)
-            if hasattr(obj, 'id_usuario') and obj.id_usuario:
-                return obj.id_usuario.nombre or obj.id_usuario.email
-            elif hasattr(obj, 'usuario') and obj.usuario:
-                return obj.usuario.nombre or obj.usuario.email
+            if obj.id_usuario:
+                # Si id_usuario es ForeignKey al modelo Usuarios
+                if hasattr(obj.id_usuario, 'nombre'):
+                    return obj.id_usuario.nombre
+                
+                # Si id_usuario es solo un UUID/CharField, buscamos la instancia
+                usr = Usuarios.objects.filter(id_usuario=obj.id_usuario).first()
+                if usr:
+                    return usr.nombre or usr.email
         except Exception:
             pass
-        return "Usuario Anónimo"
-
+        return "Usuario"
 
 class ArchivosTareaSerializer(serializers.ModelSerializer):
     class Meta:
