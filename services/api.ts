@@ -10,7 +10,7 @@ class ApiService {
   private baseURL: string;
 
   constructor() {
-    this.baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+    this.baseURL = process.env.NEXT_PUBLIC_API_URL || 'https://gestion-de-proyectos-j6ax.onrender.com';
     this.api = axios.create({
       baseURL: `${this.baseURL}/api`,
       headers: {

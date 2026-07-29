@@ -2,14 +2,14 @@
 
 import React, { useState } from 'react';
 import useSWR from 'swr';
+import Link from 'next/link';
 import api from '../../../services/api';
-import { Card, CardHeader, CardBody } from '../../../components/Card';
+import { Card, CardBody } from '../../../components/Card';
 import { Badge } from '../../../components/Badge';
 import { Button } from '../../../components/Button';
 import { Modal } from '../../../components/Modal';
 import { Input } from '../../../components/Input';
 import { Select } from '../../../components/Select';
-import Link from 'next/link';
 import { Alert } from '../../../components/Alert';
 
 interface Proyecto {
@@ -23,9 +23,7 @@ interface Proyecto {
 }
 
 export default function ProyectosPage() {
-  const { data: proyectos = [], mutate } = useSWR('/proyectos', () => api.getProyectos(), {
-    revalidateOnFocus: false,
-  });
+  const { data: proyectos = [], mutate: mutateProyectos } = useSWR('/proyectos', () => api.getProyectos());
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -64,7 +62,7 @@ export default function ProyectosPage() {
         estado: 'Activo',
       });
       setIsModalOpen(false);
-      mutate();
+      mutateProyectos();
     } catch (err) {
       setError('Error al crear el proyecto');
     } finally {
@@ -77,7 +75,7 @@ export default function ProyectosPage() {
       try {
         await api.deleteProyecto(id);
         setSuccess('Proyecto eliminado exitosamente');
-        mutate();
+        mutateProyectos();
       } catch (err) {
         setError('Error al eliminar el proyecto');
       }
@@ -92,152 +90,69 @@ export default function ProyectosPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="min-h-screen bg-slate-950 text-slate-100 p-6 space-y-6">
+      <div className="flex items-center justify-between border-b border-slate-800 pb-5">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Proyectos</h1>
-          <p className="text-gray-600 mt-1">Gestiona todos tus proyectos</p>
+          <h1 className="text-2xl font-bold text-white tracking-tight">Proyectos</h1>
+          <p className="text-slate-400 text-xs mt-1">Gestión general de proyectos y presupuestos</p>
         </div>
-        <Button onClick={() => setIsModalOpen(true)}>
+        <Button onClick={() => setIsModalOpen(true)} size="sm">
           + Nuevo Proyecto
         </Button>
       </div>
 
-      {error && (
-        <Alert type="error" title="Error" onClose={() => setError('')}>
-          {error}
-        </Alert>
-      )}
-
-      {success && (
-        <Alert type="success" title="Éxito" onClose={() => setSuccess('')}>
-          {success}
-        </Alert>
-      )}
+      {error && <Alert type="error" title="Error" onClose={() => setError('')}>{error}</Alert>}
+      {success && <Alert type="success" title="Éxito" onClose={() => setSuccess('')}>{success}</Alert>}
 
       <div className="grid grid-cols-1 gap-4">
         {Array.isArray(proyectos) && proyectos.length > 0 ? (
           proyectos.map((proyecto: Proyecto) => (
-            <Card key={proyecto.id_proyecto} hoverable>
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <Link href={`/dashboard/proyectos/${proyecto.id_proyecto}`}>
-                    <h3 className="text-lg font-semibold text-blue-600 hover:text-blue-700">
-                      {proyecto.nombre}
-                    </h3>
-                  </Link>
-                  <p className="text-gray-600 text-sm mt-1">{proyecto.descripcion}</p>
-                  <div className="flex items-center gap-4 mt-3">
-                    <span className="text-sm text-gray-500">
-                      Presupuesto: ${proyecto.presupuesto_total}
-                    </span>
-                    <span className="text-sm text-gray-500">
-                      Inicio: {new Date(proyecto.fecha_inicio).toLocaleDateString()}
-                    </span>
-                    {proyecto.fecha_fin && (
-                      <span className="text-sm text-gray-500">
-                        Fin: {new Date(proyecto.fecha_fin).toLocaleDateString()}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Badge variant={estadoColor[proyecto.estado]}>
-                    {proyecto.estado}
-                  </Badge>
-                  <Link href={`/dashboard/proyectos/${proyecto.id_proyecto}`}>
-                    <Button variant="ghost" size="sm">
-                      Ver
-                    </Button>
-                  </Link>
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    onClick={() => handleDelete(proyecto.id_proyecto)}
-                  >
-                    Eliminar
-                  </Button>
+            <div key={proyecto.id_proyecto} className="bg-slate-900 border border-slate-800 p-5 rounded-xl hover:border-slate-700 transition-all flex items-start justify-between">
+              <div className="flex-1">
+                <Link href={`/dashboard/proyectos/${proyecto.id_proyecto}`}>
+                  <h3 className="text-lg font-semibold text-blue-400 hover:text-blue-300 transition-colors">
+                    {proyecto.nombre}
+                  </h3>
+                </Link>
+                <p className="text-slate-400 text-sm mt-1">{proyecto.descripcion}</p>
+                <div className="flex items-center gap-4 mt-3 text-xs text-slate-400">
+                  <span>Presupuesto: <strong className="text-slate-200">${proyecto.presupuesto_total}</strong></span>
+                  <span>Inicio: {new Date(proyecto.fecha_inicio).toLocaleDateString()}</span>
+                  {proyecto.fecha_fin && <span>Fin: {new Date(proyecto.fecha_fin).toLocaleDateString()}</span>}
                 </div>
               </div>
-            </Card>
+              <div className="flex items-center gap-3">
+                <Badge variant={estadoColor[proyecto.estado]}>{proyecto.estado}</Badge>
+                <Button variant="danger" size="sm" onClick={() => handleDelete(proyecto.id_proyecto)}>
+                  Eliminar
+                </Button>
+              </div>
+            </div>
           ))
         ) : (
-          <Card>
-            <CardBody className="text-center text-gray-500 py-8">
-              No hay proyectos disponibles
-            </CardBody>
-          </Card>
+          <div className="bg-slate-900 border border-slate-800 text-center text-slate-400 py-12 rounded-xl">
+            No hay proyectos registrados
+          </div>
         )}
       </div>
 
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title="Crear Nuevo Proyecto"
-        size="lg"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setIsModalOpen(false)}>
-              Cancelar
-            </Button>
-            <Button loading={loading} onClick={handleSubmit}>
-              Crear Proyecto
-            </Button>
-          </>
-        }
-      >
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <Input
-            label="Nombre del Proyecto"
-            name="nombre"
-            value={formData.nombre}
-            onChange={handleChange}
-            placeholder="Mi Proyecto"
-            required
-          />
-
+      {/* Modal Crear Proyecto */}
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Crear Nuevo Proyecto" size="lg">
+        <form onSubmit={handleSubmit} className="space-y-4 text-slate-200">
+          <Input label="Nombre del Proyecto" name="nombre" value={formData.nombre} onChange={handleChange} required />
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Descripción
-            </label>
+            <label className="block text-sm font-medium text-slate-300 mb-1">Descripción</label>
             <textarea
               name="descripcion"
               value={formData.descripcion}
               onChange={handleChange}
-              placeholder="Descripción del proyecto"
               rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-
-          <Input
-            label="Presupuesto Total"
-            type="number"
-            name="presupuesto_total"
-            value={formData.presupuesto_total}
-            onChange={handleChange}
-            placeholder="0.00"
-            step="0.01"
-            required
-          />
-
-          <Input
-            label="Fecha de Inicio"
-            type="date"
-            name="fecha_inicio"
-            value={formData.fecha_inicio}
-            onChange={handleChange}
-            required
-          />
-
-          <Input
-            label="Fecha de Fin"
-            type="date"
-            name="fecha_fin"
-            value={formData.fecha_fin}
-            onChange={handleChange}
-          />
-
+          <Input label="Presupuesto Total" type="number" name="presupuesto_total" value={formData.presupuesto_total} onChange={handleChange} required />
+          <Input label="Fecha de Inicio" type="date" name="fecha_inicio" value={formData.fecha_inicio} onChange={handleChange} required />
+          <Input label="Fecha de Fin" type="date" name="fecha_fin" value={formData.fecha_fin} onChange={handleChange} />
           <Select
             label="Estado"
             name="estado"
@@ -249,6 +164,10 @@ export default function ProyectosPage() {
               { value: 'Archivado', label: 'Archivado' },
             ]}
           />
+          <div className="flex justify-end gap-2 pt-4">
+            <Button variant="secondary" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
+            <Button type="submit" loading={loading}>Crear Proyecto</Button>
+          </div>
         </form>
       </Modal>
     </div>

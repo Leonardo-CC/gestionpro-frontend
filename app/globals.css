@@ -8,16 +8,17 @@
   box-sizing: border-box;
 }
 
+html {
+  scroll-behavior: smooth;
+  color-scheme: dark;
+}
+
 body {
-  background-color: #f8f9fa;
-  color: #1a1a1a;
+  background-color: #020617; /* slate-950 para match total con tu App */
+  color: #f8fafc;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
-}
-
-html {
-  scroll-behavior: smooth;
 }
 
 a {
@@ -27,4 +28,47 @@ a {
 
 button {
   cursor: pointer;
+}
+
+/* ==========================================================
+   PERSONALIZACIÓN DE SCROLLBARS (DARK MODE)
+   ========================================================== */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #334155 #0f172a;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #090d16;
+  border-radius: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 8px;
+  border: 2px solid #090d16;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* ==========================================================
+   RESET DE SELECTS PARA NAVEGADORES WEBKIT/CHROMIUM (OPERA/CHROME)
+   ========================================================== */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  color-scheme: dark !important;
+}
+
+select option {
+  background-color: #0f172a !important; /* slate-900 */
+  color: #f8fafc !important;
 }

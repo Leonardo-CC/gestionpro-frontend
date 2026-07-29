@@ -13,20 +13,28 @@ export interface RegisterData {
 }
 
 export interface AuthResponse {
-  access: string;
+  access?: string;
+  token?: string;
   refresh?: string;
-  user: {
+  user?: {
     id: string;
     email: string;
     nombre: string;
     rol: string;
   };
+  [key: string]: any;
 }
 
 class AuthService {
+  // Garantiza que la URL base nunca sea undefined en local
+  private getApiUrl(): string {
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://gestion-de-proyectos-j6ax.onrender.com';
+    return baseUrl.replace(/\/$/, ''); // Quita barra final si existe
+  }
+
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/login/`, {
+      const response = await fetch(`${this.getApiUrl()}/api/auth/login/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -38,12 +46,24 @@ class AuthService {
       });
 
       if (!response.ok) {
-        throw new Error('Login failed');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || errorData.message || 'Credenciales inválidas');
       }
 
       const data: AuthResponse = await response.json();
-      localStorage.setItem('authToken', data.access);
-      localStorage.setItem('user', JSON.stringify(data.user));
+      
+      const token = data.access || data.token;
+      if (token) {
+        localStorage.setItem('authToken', token);
+      }
+      
+      if (data.user) {
+        localStorage.setItem('user', JSON.stringify(data.user));
+        localStorage.setItem('userId', String(data.user.id));
+        localStorage.setItem('userName', data.user.nombre);
+        localStorage.setItem('userRole', data.user.rol);
+      }
+
       return data;
     } catch (error) {
       throw error;
@@ -58,7 +78,7 @@ class AuthService {
         nombre: userData.nombre || 'Nuevo Usuario',
       };
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/signup/`, {
+      const response = await fetch(`${this.getApiUrl()}/api/auth/signup/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -68,7 +88,7 @@ class AuthService {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        const errorMsg = errorData.detail || errorData.message || JSON.stringify(errorData) || 'Registration failed';
+        const errorMsg = errorData.detail || errorData.message || JSON.stringify(errorData) || 'Error en el registro';
         throw new Error(errorMsg);
       }
 
@@ -82,6 +102,9 @@ class AuthService {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('authToken');
       localStorage.removeItem('user');
+      localStorage.removeItem('userId');
+      localStorage.removeItem('userName');
+      localStorage.removeItem('userRole');
       window.location.href = '/login';
     }
   }

@@ -6,13 +6,14 @@ interface ModalProps {
   title: string;
   children: ReactNode;
   footer?: ReactNode;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl';
 }
 
 const sizeClasses = {
   sm: 'max-w-sm',
   md: 'max-w-md',
   lg: 'max-w-lg',
+  xl: 'max-w-2xl',
 };
 
 export const Modal: React.FC<ModalProps> = ({
@@ -26,24 +27,36 @@ export const Modal: React.FC<ModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Backdrop con leve desenfoque */}
       <div
-        className="absolute inset-0 bg-black bg-opacity-50"
+        className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm transition-opacity"
         onClick={onClose}
       />
-      <div className={`relative bg-white rounded-lg shadow-xl ${sizeClasses[size]} w-full mx-4`}>
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">{title}</h2>
+
+      {/* Contenedor Modal estilo Slate Dark */}
+      <div
+        className={`relative bg-slate-900 border border-slate-800 rounded-xl shadow-2xl ${sizeClasses[size]} w-full z-10 overflow-hidden flex flex-col max-h-[90vh]`}
+      >
+        {/* Encabezado */}
+        <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-slate-950/50">
+          <h2 className="text-lg font-bold text-white tracking-tight">{title}</h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
+            className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors text-sm font-bold"
           >
             ✕
           </button>
         </div>
-        <div className="p-6 max-h-[60vh] overflow-y-auto">{children}</div>
+
+        {/* Contenido principal */}
+        <div className="p-6 overflow-y-auto flex-1 text-slate-200">
+          {children}
+        </div>
+
+        {/* Footer opcional */}
         {footer && (
-          <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200">
+          <div className="flex items-center justify-end gap-3 p-4 border-t border-slate-800 bg-slate-950/50">
             {footer}
           </div>
         )}
