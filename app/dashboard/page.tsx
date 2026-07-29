@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import useSWR from 'swr';
 import api from '../../services/api';
 import { Card, CardHeader, CardBody } from '../../components/Card';
@@ -15,18 +15,6 @@ interface Proyecto {
   fecha_fin: string;
 }
 
-const fetcher = async (url: string) => {
-  try {
-    if (url === '/proyectos') {
-      return await api.getProyectos();
-    }
-    return [];
-  } catch (error) {
-    console.error('Error fetching data:', error);
-    return [];
-  }
-};
-
 export default function DashboardPage() {
   const { data: proyectos = [], isLoading } = useSWR('/api/proyectos', () => api.getProyectos(), {
     revalidateOnFocus: false,
@@ -40,17 +28,18 @@ export default function DashboardPage() {
   };
 
   const calcularProgreso = (proyecto: Proyecto) => {
-    return Math.floor(Math.random() * 100);
+    // Calculo porcentual visual basado en el ID para mantener consistencia
+    return ((proyecto.id_proyecto * 35) % 80) + 20;
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 animate-fade-in">
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-600 mt-2">Bienvenido al sistema de gestión de proyectos</p>
+        <p className="text-gray-600 mt-1">Bienvenido al sistema de gestión de proyectos</p>
       </div>
 
-      {/* Resumen de Proyectos */}
+      {/* Resumen de Métricas */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardBody>
@@ -70,7 +59,7 @@ export default function DashboardPage() {
           <CardBody>
             <h3 className="text-gray-600 text-sm font-medium">Presupuesto Total</h3>
             <p className="text-3xl font-bold text-purple-600 mt-2">
-              ${proyectos.reduce((sum: number, p: Proyecto) => sum + (p.presupuesto_total || 0), 0)}
+              {proyectos.reduce((sum: number, p: Proyecto) => sum + Number(p.presupuesto_total || 0), 0).toFixed(2)} Bs
             </p>
           </CardBody>
         </Card>
@@ -84,48 +73,58 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Listado de Proyectos */}
+      {/* Listado de Proyectos con Enlace Directo */}
       <Card>
         <CardHeader
           title="Proyectos Recientes"
           action={
-            <Link href="/dashboard/proyectos">
-              <div className="text-blue-600 hover:text-blue-700">Ver todos →</div>
+            <Link href="/proyectos" className="text-sm font-semibold text-blue-600 hover:text-blue-700 transition-colors">
+              Ver todos →
             </Link>
           }
         />
         <CardBody>
           {isLoading ? (
-            <p className="text-gray-500">Cargando proyectos...</p>
+            <p className="text-gray-500 py-4 text-center">Cargando proyectos...</p>
           ) : proyectos.length > 0 ? (
-            <div className="space-y-4">
+            <div className="space-y-3">
               {proyectos.slice(0, 5).map((proyecto: Proyecto) => (
-                <div
+                <Link
                   key={proyecto.id_proyecto}
-                  className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
+                  href={`/proyectos/${proyecto.id_proyecto}`}
+                  className="flex items-center justify-between p-4 border border-gray-200 rounded-xl hover:bg-slate-50 transition-all hover:shadow-xs group block"
                 >
                   <div className="flex-1">
-                    <h3 className="font-semibold text-gray-900">{proyecto.nombre}</h3>
-                    <p className="text-sm text-gray-500 mt-1">
-                      Presupuesto: ${proyecto.presupuesto_total}
+                    <h3 className="font-bold text-gray-900 group-hover:text-blue-600 transition-colors">
+                      {proyecto.nombre}
+                    </h3>
+                    <p className="text-xs text-gray-500 mt-1 font-medium">
+                      Presupuesto: Bs. {Number(proyecto.presupuesto_total).toFixed(2)}
                     </p>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <div className="w-24 bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-blue-600 h-2 rounded-full"
-                        style={{ width: `${calcularProgreso(proyecto)}%` }}
-                      />
+                  
+                  <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-2">
+                      <div className="w-24 bg-gray-200 rounded-full h-2 overflow-hidden">
+                        <div
+                          className="bg-blue-600 h-2 rounded-full transition-all duration-500"
+                          style={{ width: `${calcularProgreso(proyecto)}%` }}
+                        />
+                      </div>
+                      <span className="text-xs font-semibold text-gray-400">
+                        {calcularProgreso(proyecto)}%
+                      </span>
                     </div>
-                    <Badge variant={estadoColor[proyecto.estado]}>
+
+                    <Badge variant={estadoColor[proyecto.estado] || 'primary'}>
                       {proyecto.estado}
                     </Badge>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           ) : (
-            <p className="text-gray-500">No hay proyectos disponibles</p>
+            <p className="text-gray-500 py-4 text-center">No hay proyectos disponibles</p>
           )}
         </CardBody>
       </Card>

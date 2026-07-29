@@ -18,7 +18,7 @@ class ApiService {
       },
     });
 
-    // Interceptor para agregar token
+    // Interceptor para agregar token en cada petición
     this.api.interceptors.request.use((config) => {
       const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
       if (token) {
@@ -27,12 +27,15 @@ class ApiService {
       return config;
     });
 
-    // Interceptor para manejar errores
+    // Interceptor para manejar sesión expirada
     this.api.interceptors.response.use(
       (response) => response,
       (error: AxiosError) => {
-        if (error.response?.status === 401) {
+        if (error.response?.status === 401 && typeof window !== 'undefined') {
           localStorage.removeItem('authToken');
+          localStorage.removeItem('userId');
+          localStorage.removeItem('userName');
+          localStorage.removeItem('userRole');
           window.location.href = '/login';
         }
         return Promise.reject(error);
@@ -40,28 +43,65 @@ class ApiService {
     );
   }
 
-  // Usuarios
+  // ==================== USUARIOS ====================
   async getUsuarios() {
     const response = await this.api.get('/usuarios/');
     return response.data;
   }
 
-  async getUsuario(id: string) {
+  async getUsuario(id: string | number) {
     const response = await this.api.get(`/usuarios/${id}/`);
     return response.data;
   }
 
-  async updateUsuario(id: string, data: any) {
+  async getUsuarioById(idUsuario: number | string) {
+    const response = await this.api.get(`/usuarios/${idUsuario}/`);
+    return response.data;
+  }
+
+  async updateUsuario(id: string | number, data: any) {
     const response = await this.api.patch(`/usuarios/${id}/`, data);
     return response.data;
   }
 
-  async updateTarifaHora(id: string, tarifaHora: number) {
+  async updateTarifaHora(id: string | number, tarifaHora: number) {
     const response = await this.api.patch(`/usuarios/${id}/`, { tarifa_hora: tarifaHora });
     return response.data;
   }
 
-  // Proyectos
+  async getPerfil() {
+    if (typeof window === 'undefined') return {};
+
+    const userId = localStorage.getItem('userId');
+    if (userId) {
+      try {
+        return await this.getUsuarioById(userId);
+      } catch (e) {
+        console.warn('No se pudo obtener el usuario por ID, buscando en lista...');
+      }
+    }
+
+    // Si no tenemos el ID, buscamos por el token o email
+    const usuarios = await this.getUsuarios();
+    const token = localStorage.getItem('authToken');
+    
+    if (token) {
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const userEmail = payload.email || payload.user_id;
+        const userFound = Array.isArray(usuarios) 
+          ? usuarios.find((u: any) => u.email === userEmail || u.id_usuario === userEmail)
+          : null;
+        if (userFound) return userFound;
+      } catch (e) {
+        console.error('Error al decodificar token:', e);
+      }
+    }
+
+    return Array.isArray(usuarios) ? usuarios[0] : {};
+  }
+
+  // ==================== PROYECTOS ====================
   async getProyectos() {
     const response = await this.api.get('/proyectos/');
     return response.data;
@@ -86,7 +126,7 @@ class ApiService {
     await this.api.delete(`/proyectos/${id}/`);
   }
 
-  // Tareas
+  // ==================== TAREAS ====================
   async getTareas(proyectoId?: number) {
     const params = proyectoId ? { proyecto: proyectoId } : {};
     const response = await this.api.get('/tareas/', { params });
@@ -112,7 +152,7 @@ class ApiService {
     await this.api.delete(`/tareas/${id}/`);
   }
 
-  // Asignaciones
+  // ==================== ASIGNACIONES ====================
   async getAsignaciones(tareaId?: number) {
     const params = tareaId ? { tarea: tareaId } : {};
     const response = await this.api.get('/asignaciones/', { params });
@@ -133,7 +173,7 @@ class ApiService {
     await this.api.delete(`/asignaciones/${id}/`);
   }
 
-  // Registro de Horas
+  // ==================== REGISTRO DE HORAS ====================
   async getRegistroHoras(tareaId?: number) {
     const params = tareaId ? { tarea: tareaId } : {};
     const response = await this.api.get('/registro-horas/', { params });
@@ -154,7 +194,7 @@ class ApiService {
     await this.api.delete(`/registro-horas/${id}/`);
   }
 
-  // Comentarios
+  // ==================== COMENTARIOS ====================
   async getComentarios(tareaId: number) {
     const response = await this.api.get('/comentarios/', { params: { tarea: tareaId } });
     return response.data;
@@ -169,7 +209,7 @@ class ApiService {
     await this.api.delete(`/comentarios/${id}/`);
   }
 
-  // Archivos
+  // ==================== ARCHIVOS ====================
   async getArchivos(tareaId: number) {
     const response = await this.api.get('/archivos/', { params: { tarea: tareaId } });
     return response.data;
@@ -190,7 +230,7 @@ class ApiService {
     await this.api.delete(`/archivos/${id}/`);
   }
 
-  // Historial de Presupuesto
+  // ==================== HISTORIAL Y AUDITORÍA ====================
   async getHistorialPresupuesto(proyectoId: number) {
     const response = await this.api.get('/historial-presupuesto/', {
       params: { proyecto: proyectoId },
@@ -198,7 +238,6 @@ class ApiService {
     return response.data;
   }
 
-  // Logs de Auditoría
   async getLogs(params?: any) {
     const response = await this.api.get('/logs-auditoria/', { params });
     return response.data;

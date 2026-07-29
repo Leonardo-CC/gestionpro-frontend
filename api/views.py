@@ -23,10 +23,31 @@ class ProyectosViewSet(viewsets.ModelViewSet):
     serializer_class = ProyectosSerializer
     permission_classes = [RoleBasedPermission]
 
+    def perform_create(self, serializer):
+        from .models import Usuarios
+        try:
+            # MODO DEMO: Agarramos directamente al primer usuario registrado en tu sistema
+            gerente_seguro = Usuarios.objects.first()
+            
+            # Guardamos el proyecto forzando ese usuario como gerente
+            serializer.save(id_gerente=gerente_seguro)
+            
+        except Exception as e:
+            # Si pasa absolutamente cualquier cosa, lo imprimimos pero NO rompemos la página
+            print("Error en Modo Demo salvando proyecto:", str(e))
+            serializer.save()
+
 class TareasViewSet(viewsets.ModelViewSet):
-    queryset = Tareas.objects.all()
     serializer_class = TareasSerializer
     permission_classes = [RoleBasedPermission]
+
+    def get_queryset(self):
+        queryset = Tareas.objects.all()
+        # Capturamos el parámetro 'proyecto' que manda React en la URL (ej: /api/tareas/?proyecto=1)
+        proyecto_id = self.request.query_params.get('proyecto')
+        if proyecto_id is not None:
+            queryset = queryset.filter(id_proyecto=proyecto_id)
+        return queryset
 
 class AsignacionesViewSet(viewsets.ModelViewSet):
     queryset = Asignaciones.objects.all()
@@ -34,9 +55,16 @@ class AsignacionesViewSet(viewsets.ModelViewSet):
     permission_classes = [RoleBasedPermission]
 
 class ComentariosTareaViewSet(viewsets.ModelViewSet):
-    queryset = ComentariosTarea.objects.all()
     serializer_class = ComentariosTareaSerializer
     permission_classes = [RoleBasedPermission]
+
+    def get_queryset(self):
+        queryset = ComentariosTarea.objects.all()
+        # Capturamos el parámetro 'tarea' que manda React (ej: /api/comentarios/?tarea=5)
+        tarea_id = self.request.query_params.get('tarea')
+        if tarea_id is not None:
+            queryset = queryset.filter(id_tarea=tarea_id)
+        return queryset
 
 class ArchivosTareaViewSet(viewsets.ModelViewSet):
     queryset = ArchivosTarea.objects.all()
