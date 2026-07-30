@@ -18,6 +18,7 @@ interface Proyecto {
   estado: string;
   fecha_inicio: string;
   fecha_fin: string;
+  id_gerente: string;
 }
 
 export default function ProyectosPage() {
@@ -38,10 +39,12 @@ export default function ProyectosPage() {
   });
 
   const [userRole, setUserRole] = useState<string>('');
+  const [currentUserId, setCurrentUserId] = useState<string>('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [filterEstado, setFilterEstado] = useState<string>('');
 
   const [projectForm, setProjectForm] = useState({
     nombre: '',
@@ -50,12 +53,25 @@ export default function ProyectosPage() {
     fecha_inicio: '',
     fecha_fin: '',
     estado: 'Activo',
+    id_gerente: '',
+    cliente: '',
+    alcance: '',
   });
 
-  // 🔒 Obtener el rol directamente en la carga del cliente
+  // 🔒 Obtener el rol y usuario actual
   useEffect(() => {
     const role = localStorage.getItem('userRole') || '';
+    const userId = localStorage.getItem('userId') || '';
     setUserRole(role);
+    setCurrentUserId(userId);
+    
+    // Pre-llenar gerente con el usuario actual si es gerente
+    if (userId && role === 'Gerente_Proyecto') {
+      setProjectForm(prev => ({
+        ...prev,
+        id_gerente: userId,
+      }));
+    }
   }, []);
 
   // Función para calcular el costo invertido de un proyecto
@@ -111,7 +127,7 @@ export default function ProyectosPage() {
     if (!isManagerOrAdmin) return;
     
     setError('');
-    const { nombre, presupuesto_total, fecha_inicio, fecha_fin } = projectForm;
+    const { nombre, presupuesto_total, fecha_inicio, fecha_fin, id_gerente } = projectForm;
 
     if (!nombre.trim()) {
       setError('El nombre del proyecto es obligatorio.');
@@ -129,6 +145,11 @@ export default function ProyectosPage() {
       return;
     }
 
+    if (!id_gerente) {
+      setError('Debe seleccionar un gerente para el proyecto.');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -138,6 +159,7 @@ export default function ProyectosPage() {
         presupuesto_total: monto,
         fecha_inicio,
         fecha_fin: fecha_fin || null,
+        id_gerente: parseInt(id_gerente),
       });
 
       setSuccess('Proyecto creado exitosamente');
@@ -148,6 +170,9 @@ export default function ProyectosPage() {
         fecha_inicio: '',
         fecha_fin: '',
         estado: 'Activo',
+        id_gerente: userRole === 'Gerente_Proyecto' ? currentUserId : '',
+        cliente: '',
+        alcance: '',
       });
       setIsModalOpen(false);
       mutateProyectos();
@@ -203,10 +228,26 @@ export default function ProyectosPage() {
       {error && <Alert type="error" title="Error" onClose={() => setError('')}>{error}</Alert>}
       {success && <Alert type="success" title="Éxito" onClose={() => setSuccess('')}>{success}</Alert>}
 
+      {/* Filtros */}
+      <div className="flex gap-3 items-center flex-wrap">
+        <label className="text-xs font-semibold text-slate-400">Filtrar por Estado:</label>
+        <select
+          value={filterEstado}
+          onChange={(e) => setFilterEstado(e.target.value)}
+          className="px-3 py-1.5 bg-slate-900 border border-slate-700 rounded text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="">Todos ({proyectos.length})</option>
+          <option value="Activo">Activo ({proyectos.filter((p: any) => p.estado === 'Activo').length})</option>
+          <option value="Archivado">Archivado ({proyectos.filter((p: any) => p.estado === 'Archivado').length})</option>
+        </select>
+      </div>
+
       {/* Lista de Proyectos */}
       <div className="grid grid-cols-1 gap-4">
         {Array.isArray(proyectos) && proyectos.length > 0 ? (
-          proyectos.map((proyecto: Proyecto) => {
+          proyectos
+            .filter((p: Proyecto) => !filterEstado || p.estado === filterEstado)
+            .map((proyecto: Proyecto) => {
             const presTotal = Number(proyecto.presupuesto_total || 0);
             const costoInvertido = calcularCostoInvertido(proyecto.id_proyecto);
             const saldoRestante = presTotal - costoInvertido;
@@ -241,12 +282,15 @@ export default function ProyectosPage() {
 
                   <p className="text-slate-400 text-xs">{proyecto.descripcion || 'Sin descripción'}</p>
 
-                  <div className="flex items-center gap-4 text-xs text-slate-400 flex-wrap pt-1">
+                  <div className="flex items-center gap-4 text-xs text-slate-400 flex-wrap pt-2">
                     <span>
-                      Inicio: <strong className="text-slate-300">{proyecto.fecha_inicio ? new Date(proyecto.fecha_inicio).toLocaleDateString() : 'Sin definir'}</strong>
+                      👤 <strong className="text-slate-300">{usuarios.find((u: any) => String(u.id_usuario) === String(proyecto.id_gerente))?.nombre || 'Gerente no asignado'}</strong>
+                    </span>
+                    <span>
+                      📅 Inicio: <strong className="text-slate-300">{proyecto.fecha_inicio ? new Date(proyecto.fecha_inicio).toLocaleDateString() : 'Sin definir'}</strong>
                     </span>
                     {proyecto.fecha_fin && (
-                      <span>Fin: <strong className="text-slate-300">{new Date(proyecto.fecha_fin).toLocaleDateString()}</strong></span>
+                      <span>📅 Fin: <strong className="text-slate-300">{new Date(proyecto.fecha_fin).toLocaleDateString()}</strong></span>
                     )}
                   </div>
                 </div>
@@ -337,43 +381,99 @@ export default function ProyectosPage() {
               />
             </div>
 
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Cliente</label>
+                <input
+                  type="text"
+                  name="cliente"
+                  value={projectForm.cliente}
+                  onChange={handleProjectFormChange}
+                  placeholder="Nombre del cliente"
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700/80 rounded-lg text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Alcance</label>
+                <select
+                  name="alcance"
+                  value={projectForm.alcance}
+                  onChange={handleProjectFormChange}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700/80 rounded-lg text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Seleccionar...</option>
+                  <option value="Pequeño">Pequeño (&lt; 40 horas)</option>
+                  <option value="Mediano">Mediano (40-160 horas)</option>
+                  <option value="Grande">Grande (160-400 horas)</option>
+                  <option value="Muy Grande">&gt; 400 horas</option>
+                </select>
+              </div>
+            </div>
+
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">Descripción</label>
               <textarea
                 name="descripcion"
                 value={projectForm.descripcion}
                 onChange={handleProjectFormChange}
-                placeholder="Añade los objetivos y alcance del proyecto..."
+                placeholder="Detalles del proyecto..."
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-700/80 rounded-lg text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                 rows={3}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700/80 rounded-lg text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder-slate-500"
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">Presupuesto Total (Bs.)</label>
-              <div className="relative">
-                <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-500 font-mono">Bs.</span>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  name="presupuesto_total"
-                  value={projectForm.presupuesto_total}
-                  onChange={(e) => {
-                    const val = e.target.value.replace(/[^0-9.]/g, '');
-                    if ((val.match(/\./g) || []).length <= 1) {
-                      setProjectForm({ ...projectForm, presupuesto_total: val });
-                    }
-                  }}
-                  placeholder="0.00"
-                  className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-700/80 rounded-lg text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono placeholder-slate-500"
-                  required
-                />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Presupuesto Total (Bs.)</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-500 font-mono">Bs.</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    name="presupuesto_total"
+                    value={projectForm.presupuesto_total}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^0-9.]/g, '');
+                      if ((val.match(/\./g) || []).length <= 1) {
+                        setProjectForm({ ...projectForm, presupuesto_total: val });
+                      }
+                    }}
+                    placeholder="0.00"
+                    className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-700/80 rounded-lg text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono placeholder-slate-500"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Gerente del Proyecto *</label>
+                {userRole === 'Gerente_Proyecto' ? (
+                  <div className="px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-slate-100 text-sm">
+                    {usuarios.find((u: any) => String(u.id_usuario) === projectForm.id_gerente)?.nombre || 'Cargando...'}
+                  </div>
+                ) : (
+                  <select
+                    name="id_gerente"
+                    value={projectForm.id_gerente}
+                    onChange={handleProjectFormChange}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700/80 rounded-lg text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  >
+                    <option value="">Seleccionar gerente...</option>
+                    {Array.isArray(usuarios) && usuarios.map((usuario: any) => (
+                      <option key={usuario.id_usuario} value={usuario.id_usuario}>
+                        {usuario.nombre} ({usuario.rol})
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Fecha de Inicio</label>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Fecha de Inicio *</label>
                 <input
                   type="date"
                   name="fecha_inicio"
@@ -395,6 +495,19 @@ export default function ProyectosPage() {
                   className="w-full px-3 py-2 bg-slate-950 border border-slate-700/80 rounded-lg text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 [color-scheme:dark]"
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">Estado</label>
+              <select
+                name="estado"
+                value={projectForm.estado}
+                onChange={handleProjectFormChange}
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-700/80 rounded-lg text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="Activo">Activo</option>
+                <option value="Archivado">Archivado</option>
+              </select>
             </div>
 
             <div className="flex justify-end gap-2 pt-4 border-t border-slate-800">

@@ -38,6 +38,7 @@ export default function UsuariosPage() {
   };
 
   const handleOpenModal = (usuario?: Usuario) => {
+    setError('');
     if (usuario) {
       setEditingUserId(usuario.id_usuario);
       setFormData({
@@ -58,6 +59,19 @@ export default function UsuariosPage() {
     setIsModalOpen(true);
   };
 
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setEditingUserId(null);
+    setFormData({
+      nombre: '',
+      email: '',
+      rol: 'Miembro_Equipo',
+      tarifa_hora: '',
+    });
+    setError('');
+    setSuccess('');
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -71,9 +85,13 @@ export default function UsuariosPage() {
         });
         setSuccess('Usuario actualizado exitosamente');
       } else {
+        await api.createUsuario({
+          ...formData,
+          tarifa_hora: parseFloat(formData.tarifa_hora) || 0,
+        });
         setSuccess('Usuario registrado exitosamente');
       }
-      setIsModalOpen(false);
+      handleCloseModal();
       mutate();
     } catch (err) {
       setError('Error al guardar la información del usuario');
@@ -191,7 +209,7 @@ export default function UsuariosPage() {
       {/* Modal Editar / Crear */}
       <Modal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={handleCloseModal}
         title={editingUserId ? 'Editar Usuario' : 'Nuevo Usuario'}
         size="md"
       >
@@ -259,7 +277,7 @@ export default function UsuariosPage() {
           <div className="flex justify-end gap-2 pt-4 border-t border-slate-800">
             <button
               type="button"
-              onClick={() => setIsModalOpen(false)}
+              onClick={handleCloseModal}
               className="px-4 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800 rounded-lg transition-colors"
             >
               Cancelar

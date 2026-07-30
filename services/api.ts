@@ -69,6 +69,11 @@ class ApiService {
     return response.data;
   }
 
+  async createUsuario(data: any) {
+    const response = await this.api.post('/usuarios/', data);
+    return response.data;
+  }
+
   async getPerfil() {
     if (typeof window === 'undefined') return {};
 

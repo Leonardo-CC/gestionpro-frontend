@@ -47,7 +47,6 @@ export default function ProjectDetailPage() {
     () => api.getTareas(projectId),
     { revalidateOnFocus: false }
   );
-  const tareas: Tarea[] = Array.isArray(tareasData) ? tareasData : [];
 
   // 3. Cargar usuarios
   const { data: usuariosData } = useSWR('/usuarios', () => api.getUsuarios(), {
@@ -55,7 +54,45 @@ export default function ProjectDetailPage() {
   });
   const usuarios = Array.isArray(usuariosData) ? usuariosData : [];
 
-  // 4. Cargar Historial de Presupuesto (🔒 Solo se solicita si es Admin o Gerente)
+  // 4. Cargar asignaciones
+  const { data: asignacionesData } = useSWR('/asignaciones', () => api.getAsignaciones(), {
+    revalidateOnFocus: false,
+  });
+  const asignaciones = Array.isArray(asignacionesData) ? asignacionesData : [];
+
+  // 5. Cargar registro de horas
+  const { data: registroHorasData } = useSWR('/registro-horas', () => api.getRegistroHoras(), {
+    revalidateOnFocus: false,
+  });
+  const registroHoras = Array.isArray(registroHorasData) ? registroHorasData : [];
+
+  // Enriquecer tareas con información de asignaciones
+  const tareas: Tarea[] = Array.isArray(tareasData)
+    ? tareasData.map((tarea: any) => {
+        // Buscar asignación para esta tarea
+        const asignacion = asignaciones.find(
+          (a: any) => Number(a.tarea_id || a.tarea) === Number(tarea.id_tarea)
+        );
+
+        // Resolver nombre del usuario asignado
+        let responsable_nombre = tarea.responsable_nombre || 'Sin asignar';
+        if (asignacion && usuarios.length > 0) {
+          const usuarioAsignado = usuarios.find(
+            (u: any) => String(u.id_usuario) === String(asignacion.usuario_id || asignacion.usuario)
+          );
+          if (usuarioAsignado) {
+            responsable_nombre = usuarioAsignado.nombre || usuarioAsignado.email || 'Sin asignar';
+          }
+        }
+
+        return {
+          ...tarea,
+          responsable_nombre,
+        };
+      })
+    : [];
+
+  // 6. Cargar Historial de Presupuesto (🔒 Solo se solicita si es Admin o Gerente)
   const { data: historialData, mutate: mutateHistorial } = useSWR(
     projectId && isManagerOrAdmin ? `/historial-presupuesto/?proyecto=${projectId}` : null,
     () => api.getHistorialPresupuesto(projectId),
