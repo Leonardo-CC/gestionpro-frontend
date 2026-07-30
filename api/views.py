@@ -26,7 +26,7 @@ from api.permissions import RoleBasedPermission
 def get_current_usuario(request):
     """
     Intenta recuperar el objeto Usuarios mapeado al usuario autenticado.
-    Búsqueda ordenada: por id_usuario (UUID) -> por email -> fallback a Leonardo / primero.
+    Búsqueda ordenada: por id_usuario (UUID) -> por email -> fallback seguro.
     """
     if not request or not hasattr(request, 'user') or not request.user.is_authenticated:
         return Usuarios.objects.filter(nombre__icontains='Leonardo').first() or Usuarios.objects.first()
@@ -34,7 +34,7 @@ def get_current_usuario(request):
     # Búsqueda 1: Por ID de usuario (UUID)
     user_id = getattr(request.user, 'id_usuario', None) or getattr(request.user, 'id', None)
     if user_id:
-        usuario = Usuarios.objects.filter(id_usuario=user_id).first()
+        usuario = Usuarios.objects.filter(id_usuario=str(user_id)).first()
         if usuario:
             return usuario
 
@@ -96,9 +96,10 @@ class TareasViewSet(viewsets.ModelViewSet):
     permission_classes = [RoleBasedPermission]
 
     def get_queryset(self):
-        queryset = Tareas.objects.all()
-        proyecto_id = self.request.query_params.get('proyecto')
-        if proyecto_id is not None:
+        queryset = Tareas.objects.all().order_by('-fecha_inicio')
+        # Soporta tanto ?proyecto=ID como ?id_proyecto=ID
+        proyecto_id = self.request.query_params.get('proyecto') or self.request.query_params.get('id_proyecto')
+        if proyecto_id is not None and proyecto_id != 'TODOS':
             queryset = queryset.filter(id_proyecto=proyecto_id)
         return queryset
 
@@ -115,7 +116,8 @@ class ComentariosTareaViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = ComentariosTarea.objects.all().order_by('-fecha_creacion')
-        tarea_id = self.request.query_params.get('tarea')
+        # 💡 Soporta tanto ?tarea=ID como ?id_tarea=ID para el filtro del modal
+        tarea_id = self.request.query_params.get('tarea') or self.request.query_params.get('id_tarea')
         if tarea_id is not None:
             queryset = queryset.filter(id_tarea=tarea_id)
         return queryset
@@ -135,7 +137,7 @@ class ArchivosTareaViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = ArchivosTarea.objects.all().order_by('-fecha_subida')
-        tarea_id = self.request.query_params.get('tarea')
+        tarea_id = self.request.query_params.get('tarea') or self.request.query_params.get('id_tarea')
         if tarea_id is not None:
             queryset = queryset.filter(id_tarea=tarea_id)
         return queryset
@@ -155,7 +157,7 @@ class RegistroHorasViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = RegistroHoras.objects.all().order_by('-fecha_creacion')
-        tarea_id = self.request.query_params.get('tarea')
+        tarea_id = self.request.query_params.get('tarea') or self.request.query_params.get('id_tarea')
         if tarea_id is not None:
             queryset = queryset.filter(id_tarea=tarea_id)
         return queryset
@@ -175,14 +177,14 @@ class HistorialPresupuestoViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = HistorialPresupuesto.objects.all().order_by('-fecha')
-        proyecto_id = self.request.query_params.get('proyecto')
+        proyecto_id = self.request.query_params.get('proyecto') or self.request.query_params.get('id_proyecto')
         if proyecto_id is not None:
             queryset = queryset.filter(proyecto_id=proyecto_id)
         return queryset
 
 
 class LogsAuditoriaViewSet(viewsets.ModelViewSet):
-    queryset = LogsAuditoria.objects.all()
+    queryset = LogsAuditoria.objects.all().order_by('-fecha_hora')
     serializer_class = LogsAuditoriaSerializer
     permission_classes = [RoleBasedPermission]
 
