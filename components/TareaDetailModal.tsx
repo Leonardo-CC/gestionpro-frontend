@@ -62,7 +62,7 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
     return 'Sin asignar';
   };
 
-  // Peticiones SWR a los endpoints exactos de tu Swagger
+  // Peticiones SWR
   const { data: rawComentarios = [], mutate: mutateComentarios } = useSWR(
     tareaId ? `/comentarios/?tarea=${tareaId}` : null,
     () => (tareaId ? api.getComentarios(tareaId) : []),
@@ -156,6 +156,9 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
   const estimadasDecimal = Number(tarea.horas_estimadas || 0);
   const diferenciaHorasDecimal = estimadasDecimal - totalHorasInvertidasDecimal;
   const esEficiente = diferenciaHorasDecimal >= 0;
+  const porcentajeAvanceHoras = estimadasDecimal > 0 
+    ? Math.min(Math.round((totalHorasInvertidasDecimal / estimadasDecimal) * 100), 100)
+    : 0;
 
   const responsableActualNombre = resolverNombreEnCliente(idResponsableReal, tarea.responsable_nombre);
 
@@ -201,13 +204,11 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
   const handleRegistrarAvanceCompleto = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validación inicial
     if (!comentarioTexto.trim() && minutosAHoras <= 0 && !archivoEvidencia) {
       setError('Por favor ingresa un comentario de avance, tiempo o adjunta una evidencia.');
       return;
     }
 
-    // Validar que tarea tenga ID válido
     if (!tarea?.id_tarea || Number(tarea.id_tarea) <= 0) {
       setError('Error: Tarea inválida. Recarga la página.');
       return;
@@ -221,7 +222,7 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
       const comentarioLimpio = comentarioTexto.trim();
       const erroresRegistro = [];
 
-      // 1. Registrar comentario si existe
+      // 1. Registrar comentario
       if (comentarioLimpio) {
         try {
           await api.createComentario({
@@ -229,12 +230,12 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
             texto_comentario: comentarioLimpio,
           });
         } catch (err: any) {
-          console.error('[v0] Error al crear comentario:', err);
+          console.error('Error al crear comentario:', err);
           erroresRegistro.push('comentario');
         }
       }
 
-      // 2. Registrar horas si existen
+      // 2. Registrar horas
       if (horasParaBackend > 0) {
         try {
           await api.createRegistroHoras({
@@ -244,25 +245,24 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
             comentario: comentarioLimpio || `Tiempo registrado (+${formatTiempoHumano(minutosAHoras)})`,
           });
         } catch (err: any) {
-          console.error('[v0] Error al registrar horas:', err);
+          console.error('Error al registrar horas:', err);
           erroresRegistro.push('horas');
         }
       }
 
-      // 3. Subir archivo si existe
+      // 3. Subir evidencia/archivo
       if (archivoEvidencia) {
         try {
           await api.uploadArchivo(tarea.id_tarea, archivoEvidencia);
         } catch (err: any) {
-          console.error('[v0] Error al subir archivo:', err);
-          erroresRegistro.push('archivo');
+          console.error('Error al subir archivo:', err);
+          erroresRegistro.push('evidencia (Revisa permisos RLS en Supabase Storage)');
         }
       }
 
-      // Si hubo errores, mostrarlos
       if (erroresRegistro.length > 0) {
         const erroresTexto = erroresRegistro.join(', ');
-        setError(`Error al registrar: ${erroresTexto}. Revisa que todos los datos sean válidos.`);
+        setError(`Falla parcial al registrar: ${erroresTexto}.`);
         setLoading(false);
         return;
       }
@@ -281,8 +281,8 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
 
       if (onUpdateSuccess) onUpdateSuccess();
     } catch (err: any) {
-      console.error('[v0] Error general al guardar el avance:', err);
-      setError('Error inesperado al registrar el avance y la evidencia. Intenta de nuevo.');
+      console.error('Error general al guardar avance:', err);
+      setError('Error inesperado al registrar el avance.');
     } finally {
       setLoading(false);
     }
@@ -293,23 +293,17 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
       setLoading(true);
       setError('');
 
-      // 1. Actualizar estado de la tarea
-      const payload: any = { 
-        estado: nuevoEstado,
-      };
+      const payload: any = { estado: nuevoEstado };
       await api.updateTarea(tarea.id_tarea, payload);
 
-      // 2. Manejar asignación del responsable
       if (nuevoResponsableId) {
         if (asignacionActiva) {
-          // Actualizar asignación existente
           const asignacionId = asignacionActiva.id || asignacionActiva.id_asignacion;
           await api.updateAsignacion(asignacionId, {
             usuario_id: nuevoResponsableId,
             horas_planificadas: asignacionActiva.horas_planificadas || 0,
           });
         } else {
-          // Crear nueva asignación
           await api.createAsignacion({
             tarea_id: tarea.id_tarea,
             usuario_id: nuevoResponsableId,
@@ -317,12 +311,10 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
           });
         }
       } else if (asignacionActiva) {
-        // Eliminar asignación si se deasigna
         const asignacionId = asignacionActiva.id || asignacionActiva.id_asignacion;
         await api.deleteAsignacion(asignacionId);
       }
 
-      // Esperar a que se revaliden los datos antes de cerrar
       await Promise.all([
         mutateAsignaciones(),
         mutateComentarios(),
@@ -331,7 +323,7 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
       if (onUpdateSuccess) onUpdateSuccess();
       onClose();
     } catch (err) {
-      console.error('[v0] Error al actualizar gestión de tarea:', err);
+      console.error('Error al actualizar gestión de tarea:', err);
       setError('Error al actualizar el responsable o el estado.');
     } finally {
       setLoading(false);
@@ -382,30 +374,30 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
               </p>
             </div>
 
-            {/* FORMULARIO DE REGISTRO */}
+            {/* FORMULARIO DE REGISTRO DE AVANCE */}
             <form onSubmit={handleRegistrarAvanceCompleto} className="bg-slate-950 p-5 rounded-xl border border-blue-500/30 shadow-lg space-y-4">
-              <h3 className="text-xs font-bold text-blue-400 uppercase tracking-wider">
-                Publicar Nuevo Avance con Evidencia
+              <h3 className="text-xs font-bold text-blue-400 uppercase tracking-wider flex items-center gap-2">
+                <span>⏱️</span> Publicar Avance y Registro de Horas
               </h3>
 
               {error && <div className="p-2 bg-rose-500/10 border border-rose-500/20 rounded text-rose-400 text-xs">{error}</div>}
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Resumen / Comentario del Trabajo</label>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Resumen del Trabajo Realizado</label>
                 <textarea
                   rows={2}
                   value={comentarioTexto}
                   onChange={(e) => setComentarioTexto(e.target.value)}
-                  placeholder="Escribe aquí el detalle del avance realizado..."
+                  placeholder="Escribe el detalle del avance..."
                   className="w-full px-3 py-2 bg-slate-900 border border-slate-700/80 rounded-lg text-slate-100 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 />
               </div>
 
-              {/* SECTOR DE TIEMPO */}
+              {/* SECTOR DE TIEMPO (RELOJ E INCRERMENTAL) */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2 bg-slate-900/60 p-3 rounded-lg border border-slate-800">
                   <div className="flex justify-between items-center">
-                    <label className="block text-xs font-semibold text-slate-300">Tiempo a Cargar</label>
+                    <label className="block text-xs font-semibold text-slate-300">Tiempo a Registrar</label>
                     <span className="text-xs font-bold font-mono text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">
                       {formatTiempoHumano(minutosAHoras)}
                     </span>
@@ -472,7 +464,7 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
           {/* COLUMNA DERECHA */}
           <div className="space-y-6">
             
-            {/* BLOQUE DE GESTIÓN GERENCIAL */}
+            {/* GESTIÓN GERENCIAL */}
             {isManagerOrAdmin && (
               <div className="bg-slate-950 p-4 rounded-xl border border-blue-500/40 space-y-3">
                 <h4 className="text-xs font-bold text-blue-400 uppercase tracking-wider">Gestión de Tarea (Gerencia)</h4>
@@ -519,14 +511,30 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
               </div>
             )}
 
-            {/* CONTROL DE TIEMPO */}
+            {/* CONTROL DE TIEMPO Y COSTOS EN BOLIVIANOS (Bs.) */}
             <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
-              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Control de Tiempo</h4>
+              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Control de Tiempo & Costos</h4>
               
               <div className="flex justify-between text-xs font-semibold">
-                <span className="text-slate-400 font-medium">Responsable Actual:</span>
+                <span className="text-slate-400 font-medium">Responsable:</span>
                 <span className="text-slate-200 font-bold">{responsableActualNombre}</span>
               </div>
+
+              {/* MEDIDOR DE TIEMPO VISUAL */}
+              {estimadasDecimal > 0 && (
+                <div className="space-y-1 pt-1">
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-slate-400">Progreso Horas:</span>
+                    <span className="text-slate-200 font-bold">{porcentajeAvanceHoras}%</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full transition-all duration-300 ${totalHorasInvertidasDecimal > estimadasDecimal ? 'bg-rose-500' : 'bg-blue-500'}`}
+                      style={{ width: `${porcentajeAvanceHoras}%` }}
+                    />
+                  </div>
+                </div>
+              )}
 
               <div className="flex justify-between text-xs font-semibold">
                 <span className="text-slate-400">Invertidas:</span>
@@ -538,17 +546,18 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
                 <span className="text-slate-200 font-bold font-mono">{estimadasDecimal > 0 ? formatDecimalAHumano(estimadasDecimal) : 'Sin estimar'}</span>
               </div>
 
+              {/* TARIFA Y COSTOS EN BOLIVIANOS (Bs.) */}
               {tarifaResponsable > 0 && (
                 <div className="pt-2 border-t border-slate-800 space-y-2">
-                  <span className="text-[10px] text-slate-500 block">Inversión en Costo (Horas × Tarifa):</span>
+                  <span className="text-[10px] text-slate-500 block">Costo Operativo (Tarifa: Bs. {tarifaResponsable.toFixed(2)}/h):</span>
                   <div className="flex justify-between text-xs font-semibold">
                     <span className="text-slate-400">Costo Invertido:</span>
-                    <span className="text-amber-400 font-mono">${costoInvertido.toFixed(2)}</span>
+                    <span className="text-amber-400 font-mono font-bold">Bs. {costoInvertido.toFixed(2)}</span>
                   </div>
                   {estimadasDecimal > 0 && (
                     <div className="flex justify-between text-xs font-semibold">
                       <span className="text-slate-400">Costo Estimado:</span>
-                      <span className="text-slate-300 font-mono">${costoEstimado.toFixed(2)}</span>
+                      <span className="text-slate-300 font-mono">Bs. {costoEstimado.toFixed(2)}</span>
                     </div>
                   )}
                 </div>
