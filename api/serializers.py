@@ -16,6 +16,33 @@ class UsuariosSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+# 💡 HELPER DEFENSIVO Y ROBUSTO PARA RESOLVER NOMBRES DESDE CUALQUIER TIPO DE CAMPO
+def resolver_nombre_usuario(id_usuario_raw):
+    if not id_usuario_raw:
+        return "Sin Asignar"
+    
+    # 1. Si Django ya devolvió el objeto Usuarios instanciado
+    if isinstance(id_usuario_raw, Usuarios):
+        return id_usuario_raw.nombre or id_usuario_raw.email or "Usuario Activo"
+
+    # 2. Si es un objeto que contiene los atributos directos
+    if hasattr(id_usuario_raw, 'nombre') and id_usuario_raw.nombre:
+        return id_usuario_raw.nombre
+
+    # 3. Extracción limpia de la cadena UUID (Soporta string o UUID de Python)
+    uuid_str = str(getattr(id_usuario_raw, 'id_usuario', id_usuario_raw)).strip()
+
+    # 4. Consulta directa en la tabla public.usuarios de PostgreSQL
+    try:
+        usr = Usuarios.objects.filter(id_usuario=uuid_str).first()
+        if usr:
+            return usr.nombre or usr.email or "Usuario Registrado"
+    except Exception as e:
+        print(f"Error consultando usuario por UUID ({uuid_str}): {e}")
+
+    return "Usuario Registrado"
+
+
 class ProyectosSerializer(serializers.ModelSerializer):
     costo_invertido = serializers.SerializerMethodField()
     presupuesto_restante = serializers.SerializerMethodField()
@@ -38,7 +65,8 @@ class ProyectosSerializer(serializers.ModelSerializer):
                     if hasattr(reg.id_usuario, 'tarifa_hora'):
                         tarifa = float(reg.id_usuario.tarifa_hora or 0)
                     else:
-                        usr = Usuarios.objects.filter(id_usuario=str(reg.id_usuario)).first()
+                        uuid_str = str(getattr(reg.id_usuario, 'id_usuario', reg.id_usuario))
+                        usr = Usuarios.objects.filter(id_usuario=uuid_str).first()
                         if usr:
                             tarifa = float(usr.tarifa_hora or 0)
                 costo_total += (horas * tarifa)
@@ -75,7 +103,6 @@ class TareasSerializer(serializers.ModelSerializer):
             )['total']
             return float(total) if total is not None else 0.0
         except Exception as e:
-            print(f"[SERIALIZER WARNING] Error al calcular horas para tarea {obj.id_tarea}: {e}")
             return 0.0
 
     def validate_estado(self, value):
@@ -99,16 +126,14 @@ class TareasSerializer(serializers.ModelSerializer):
             f"El estado '{value}' no es válido. Opciones permitidas: IDEA, POR_HACER, EN_CURSO, PRUEBAS, FINALIZADO."
         )
 
+    # 💡 RESUELVE EL RESPONSABLE DESDE LA TABLA public.asignaciones
     def get_responsable_nombre(self, obj):
         try:
-            asignacion = obj.asignaciones.first() if hasattr(obj, 'asignaciones') else getattr(obj, 'asignaciones_set', None)
-            if hasattr(asignacion, 'first'):
-                asignacion = asignacion.first()
-            
-            if asignacion and asignacion.usuario:
-                return asignacion.usuario.nombre or asignacion.usuario.email
-        except Exception:
-            pass
+            asignacion = Asignaciones.objects.filter(tarea_id=obj.id_tarea).first()
+            if asignacion and asignacion.usuario_id:
+                return resolver_nombre_usuario(asignacion.usuario_id)
+        except Exception as e:
+            print(f"Error resolviendo responsable: {e}")
         return "Sin asignar"
 
     def create(self, validated_data):
@@ -117,14 +142,14 @@ class TareasSerializer(serializers.ModelSerializer):
 
         usuario_id = validated_data.pop('usuario_asignado', None)
         tarea = super().create(validated_data)
-        
+
         if usuario_id:
             try:
-                usuario_obj = Usuarios.objects.filter(id_usuario=usuario_id).first()
+                usuario_obj = Usuarios.objects.filter(id_usuario=str(usuario_id)).first()
                 if usuario_obj:
                     Asignaciones.objects.create(
-                        tarea=tarea,
-                        usuario=usuario_obj,
+                        tarea_id=tarea.id_tarea,
+                        usuario_id=usuario_obj.id_usuario,
                         horas_planificadas=tarea.horas_estimadas or 0
                     )
             except Exception as e:
@@ -137,21 +162,15 @@ class TareasSerializer(serializers.ModelSerializer):
 
         if usuario_id:
             try:
-                usuario_obj = Usuarios.objects.filter(id_usuario=usuario_id).first()
+                usuario_obj = Usuarios.objects.filter(id_usuario=str(usuario_id)).first()
                 if usuario_obj:
-                    asignacion = instance.asignaciones.first() if hasattr(instance, 'asignaciones') else getattr(instance, 'asignaciones_set', None)
-                    if hasattr(asignacion, 'first'):
-                        asignacion = asignacion.first()
-
-                    if asignacion:
-                        asignacion.usuario = usuario_obj
-                        asignacion.save()
-                    else:
-                        Asignaciones.objects.create(
-                            tarea=tarea,
-                            usuario=usuario_obj,
-                            horas_planificadas=tarea.horas_estimadas or 0
-                        )
+                    Asignaciones.objects.update_or_create(
+                        tarea_id=instance.id_tarea,
+                        defaults={
+                            'usuario_id': usuario_obj.id_usuario,
+                            'horas_planificadas': tarea.horas_estimadas or 0
+                        }
+                    )
             except Exception as e:
                 print(f"Error actualizando usuario asignado: {e}")
         return tarea
@@ -161,28 +180,6 @@ class AsignacionesSerializer(serializers.ModelSerializer):
     class Meta:
         model = Asignaciones
         fields = '__all__'
-
-
-# Helper robusto para resolver nombres de usuarios desde IDs o relaciones FK
-def resolver_nombre_usuario(id_usuario_raw):
-    if not id_usuario_raw:
-        return "Sin Asignar"
-    
-    # 1. Si ya es una instancia de la tabla Usuarios
-    if isinstance(id_usuario_raw, Usuarios):
-        return id_usuario_raw.nombre or id_usuario_raw.email or "Usuario Activo"
-
-    # 2. Si tiene propiedad .nombre (Relación FK precargada)
-    if hasattr(id_usuario_raw, 'nombre') and id_usuario_raw.nombre:
-        return id_usuario_raw.nombre
-
-    # 3. Búsqueda por UUID string en la tabla Usuarios de PostgreSQL
-    usr_id_str = str(getattr(id_usuario_raw, 'id_usuario', id_usuario_raw))
-    usr = Usuarios.objects.filter(id_usuario=usr_id_str).first()
-    if usr:
-        return usr.nombre or usr.email or "Usuario Activo"
-
-    return "Miembro del Equipo"
 
 
 class ComentariosTareaSerializer(serializers.ModelSerializer):
@@ -196,11 +193,7 @@ class ComentariosTareaSerializer(serializers.ModelSerializer):
         }
 
     def get_usuario_nombre(self, obj):
-        try:
-            return resolver_nombre_usuario(obj.id_usuario)
-        except Exception as e:
-            print(f"Error resolviendo usuario_nombre en comentario: {e}")
-            return "Miembro del Equipo"
+        return resolver_nombre_usuario(obj.id_usuario)
 
 
 class ArchivosTareaSerializer(serializers.ModelSerializer):
@@ -214,10 +207,7 @@ class ArchivosTareaSerializer(serializers.ModelSerializer):
         }
 
     def get_usuario_nombre(self, obj):
-        try:
-            return resolver_nombre_usuario(obj.id_usuario)
-        except Exception:
-            return "Miembro del Equipo"
+        return resolver_nombre_usuario(obj.id_usuario)
 
 
 class RegistroHorasSerializer(serializers.ModelSerializer):
@@ -231,10 +221,7 @@ class RegistroHorasSerializer(serializers.ModelSerializer):
         }
 
     def get_usuario_nombre(self, obj):
-        try:
-            return resolver_nombre_usuario(obj.id_usuario)
-        except Exception:
-            return "Miembro del Equipo"
+        return resolver_nombre_usuario(obj.id_usuario)
 
 
 class HistorialPresupuestoSerializer(serializers.ModelSerializer):
@@ -245,10 +232,7 @@ class HistorialPresupuestoSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
     def get_usuario_nombre(self, obj):
-        try:
-            return resolver_nombre_usuario(obj.usuario)
-        except Exception:
-            return "Gerencia / Sistema"
+        return resolver_nombre_usuario(getattr(obj, 'usuario_id', getattr(obj, 'usuario', None)))
 
 
 class LogsAuditoriaSerializer(serializers.ModelSerializer):

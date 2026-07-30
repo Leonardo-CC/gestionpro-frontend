@@ -22,31 +22,40 @@ from api.serializers import (
 from api.permissions import RoleBasedPermission
 
 
-# Helper para resolver el usuario autenticado real
+# 💡 HELPER MULTI-CAPA PARA OBTENER EL USUARIO AUTÉNTICO DE LA PETICIÓN
 def get_current_usuario(request):
     """
-    Intenta recuperar el objeto Usuarios mapeado al usuario autenticado.
-    Búsqueda ordenada: por id_usuario (UUID) -> por email -> fallback seguro.
+    Recupera la instancia de Usuarios intentando:
+    1. ID/UUID desde el body/payload de la petición (id_usuario / usuario_id)
+    2. Usuario autenticado en request.user
+    3. Primer usuario activo registrado en la base de datos de PostgreSQL.
     """
-    if not request or not hasattr(request, 'user') or not request.user.is_authenticated:
-        return Usuarios.objects.filter(nombre__icontains='Leonardo').first() or Usuarios.objects.first()
+    if not request:
+        return Usuarios.objects.first()
 
-    # Búsqueda 1: Por ID de usuario (UUID)
-    user_id = getattr(request.user, 'id_usuario', None) or getattr(request.user, 'id', None)
-    if user_id:
-        usuario = Usuarios.objects.filter(id_usuario=str(user_id)).first()
-        if usuario:
-            return usuario
+    # Búsqueda 1: Si el frontend envió id_usuario en los datos de la petición
+    user_id_data = request.data.get('id_usuario') or request.data.get('usuario_id')
+    if user_id_data:
+        usr = Usuarios.objects.filter(id_usuario=str(user_id_data)).first()
+        if usr:
+            return usr
 
-    # Búsqueda 2: Por Email
-    user_email = getattr(request.user, 'email', None)
-    if user_email:
-        usuario = Usuarios.objects.filter(email=user_email).first()
-        if usuario:
-            return usuario
+    # Búsqueda 2: Si viene autenticado por DRF / Supabase Auth
+    if hasattr(request, 'user') and request.user.is_authenticated:
+        user_id = getattr(request.user, 'id_usuario', None) or getattr(request.user, 'id', None)
+        if user_id:
+            usr = Usuarios.objects.filter(id_usuario=str(user_id)).first()
+            if usr:
+                return usr
+        
+        user_email = getattr(request.user, 'email', None)
+        if user_email:
+            usr = Usuarios.objects.filter(email=user_email).first()
+            if usr:
+                return usr
 
-    # Búsqueda 3: Fallback seguro
-    return Usuarios.objects.filter(nombre__icontains='Leonardo').first() or Usuarios.objects.first()
+    # Búsqueda 3: Fallback al primer usuario registrado en la tabla
+    return Usuarios.objects.filter(activo=True).first() or Usuarios.objects.first()
 
 
 class UsuariosViewSet(viewsets.ModelViewSet):
@@ -56,7 +65,7 @@ class UsuariosViewSet(viewsets.ModelViewSet):
 
 
 class ProyectosViewSet(viewsets.ModelViewSet):
-    queryset = Proyectos.objects.all()
+    queryset = Proyectos.objects.all().order_by('-fecha_creacion')
     serializer_class = ProyectosSerializer
     permission_classes = [RoleBasedPermission]
 
@@ -65,7 +74,7 @@ class ProyectosViewSet(viewsets.ModelViewSet):
             gerente_activo = get_current_usuario(self.request)
             serializer.save(id_gerente=gerente_activo)
         except Exception as e:
-            print("Error registrando proyecto:", str(e))
+            print(f"[PROYECTO CREATE WARNING] {e}")
             serializer.save()
 
     def perform_update(self, serializer):
@@ -97,10 +106,9 @@ class TareasViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = Tareas.objects.all().order_by('-fecha_inicio')
-        # Soporta tanto ?proyecto=ID como ?id_proyecto=ID
         proyecto_id = self.request.query_params.get('proyecto') or self.request.query_params.get('id_proyecto')
         if proyecto_id is not None and proyecto_id != 'TODOS':
-            queryset = queryset.filter(id_proyecto=proyecto_id)
+            queryset = queryset.filter(id_proyecto_id=int(proyecto_id))
         return queryset
 
 
@@ -116,20 +124,17 @@ class ComentariosTareaViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = ComentariosTarea.objects.all().order_by('-fecha_creacion')
-        # 💡 Extraer el ID independientemente de cómo venga en la URL
         tarea_id = self.request.query_params.get('tarea') or self.request.query_params.get('id_tarea')
         if tarea_id is not None and tarea_id != '':
-            # 🎯 USAR id_tarea_id PARA RECONOCER EL FK EN DJANGO
             queryset = queryset.filter(id_tarea_id=int(tarea_id))
         return queryset
 
     def perform_create(self, serializer):
-        try:
-            usuario_activo = get_current_usuario(self.request)
-            serializer.save(id_usuario=usuario_activo)
-        except Exception as e:
-            print(f"Error asignando usuario en comentario: {e}")
+        usuario_activo = get_current_usuario(self.request)
+        if 'id_usuario' in serializer.validated_data:
             serializer.save()
+        else:
+            serializer.save(id_usuario=usuario_activo)
 
 
 class ArchivosTareaViewSet(viewsets.ModelViewSet):
@@ -144,12 +149,11 @@ class ArchivosTareaViewSet(viewsets.ModelViewSet):
         return queryset
 
     def perform_create(self, serializer):
-        try:
-            usuario_activo = get_current_usuario(self.request)
-            serializer.save(id_usuario=usuario_activo)
-        except Exception as e:
-            print(f"Error asignando usuario en archivo: {e}")
+        usuario_activo = get_current_usuario(self.request)
+        if 'id_usuario' in serializer.validated_data:
             serializer.save()
+        else:
+            serializer.save(id_usuario=usuario_activo)
 
 
 class RegistroHorasViewSet(viewsets.ModelViewSet):
@@ -164,12 +168,11 @@ class RegistroHorasViewSet(viewsets.ModelViewSet):
         return queryset
 
     def perform_create(self, serializer):
-        try:
-            usuario_activo = get_current_usuario(self.request)
-            serializer.save(id_usuario=usuario_activo)
-        except Exception as e:
-            print(f"Error asignando usuario en registro de horas: {e}")
+        usuario_activo = get_current_usuario(self.request)
+        if 'id_usuario' in serializer.validated_data:
             serializer.save()
+        else:
+            serializer.save(id_usuario=usuario_activo)
 
 
 class HistorialPresupuestoViewSet(viewsets.ModelViewSet):
