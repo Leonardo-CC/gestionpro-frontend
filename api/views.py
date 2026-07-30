@@ -119,7 +119,6 @@ class AsignacionesViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = Asignaciones.objects.all()
-        # Permitir filtrar asignaciones por ?tarea=ID
         tarea_id = self.request.query_params.get('tarea') or self.request.query_params.get('id_tarea')
         if tarea_id is not None and tarea_id != '':
             queryset = queryset.filter(tarea_id=int(tarea_id))
@@ -128,7 +127,7 @@ class AsignacionesViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         data = request.data
         tarea_id = data.get('tarea') or data.get('tarea_id') or data.get('id_tarea')
-        usuario_id = data.get('usuario') or data.get('usuario_id') or data.get('id_usuario')
+        usuario_id = data.get('usuario') or data.get('usuario_id') or data.get('id_usuario') or data.get('usuario_asignado')
         horas = data.get('horas_planificadas', 0)
 
         if not tarea_id or not usuario_id:
@@ -148,6 +147,29 @@ class AsignacionesViewSet(viewsets.ModelViewSet):
             serializer = self.get_serializer(asignacion)
             status_code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
             return Response(serializer.data, status=status_code)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        data = request.data
+        
+        tarea_id = data.get('tarea') or data.get('tarea_id') or data.get('id_tarea') or instance.tarea_id
+        usuario_id = data.get('usuario') or data.get('usuario_id') or data.get('id_usuario') or data.get('usuario_asignado') or instance.usuario_id
+        horas = data.get('horas_planificadas', instance.horas_planificadas)
+
+        try:
+            asignacion, _ = Asignaciones.objects.update_or_create(
+                id=instance.id,
+                defaults={
+                    'tarea_id': int(tarea_id),
+                    'usuario_id': str(usuario_id),
+                    'horas_planificadas': float(horas) if horas else 0.0
+                }
+            )
+            serializer = self.get_serializer(asignacion)
+            return Response(serializer.data, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 

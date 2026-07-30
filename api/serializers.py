@@ -181,9 +181,29 @@ class TareasSerializer(serializers.ModelSerializer):
 
 
 class AsignacionesSerializer(serializers.ModelSerializer):
+    tarea = serializers.PrimaryKeyRelatedField(queryset=Tareas.objects.all(), required=False)
+    usuario = serializers.PrimaryKeyRelatedField(queryset=Usuarios.objects.all(), required=False)
+    tarea_id = serializers.IntegerField(write_only=True, required=False)
+    usuario_id = serializers.CharField(write_only=True, required=False)
+
     class Meta:
         model = Asignaciones
-        fields = '__all__'
+        fields = ['id', 'tarea', 'usuario', 'horas_planificadas', 'tarea_id', 'usuario_id']
+
+    def validate(self, attrs):
+        if 'tarea_id' in attrs and not attrs.get('tarea'):
+            attrs['tarea'] = Tareas.objects.filter(id_tarea=attrs.pop('tarea_id')).first()
+
+        us_id = attrs.pop('usuario_id', None)
+        if us_id and not attrs.get('usuario'):
+            attrs['usuario'] = Usuarios.objects.filter(id_usuario=str(us_id)).first()
+
+        if not attrs.get('tarea'):
+            raise serializers.ValidationError({"tarea": "This field is required."})
+        if not attrs.get('usuario'):
+            raise serializers.ValidationError({"usuario": "This field is required."})
+
+        return attrs
 
 
 class ComentariosTareaSerializer(serializers.ModelSerializer):
