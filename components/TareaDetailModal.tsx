@@ -34,7 +34,7 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
   const { data: rawUsuarios = [] } = useSWR(tareaId ? '/usuarios' : null, () => api.getUsuarios(), { revalidateOnFocus: false });
   const usuarios = Array.isArray(rawUsuarios) ? rawUsuarios : [];
 
-  // Cargar Asignaciones reales de la base de datos
+  // Cargar asignaciones filtradas o la lista general de asignaciones
   const { data: rawAsignaciones = [], mutate: mutateAsignaciones } = useSWR(
     tareaId ? `/asignaciones/?tarea=${tareaId}` : null,
     () => api.getAsignaciones ? api.getAsignaciones() : [],
@@ -59,10 +59,10 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
       return usrEncontrado.nombre || usrEncontrado.email || 'Usuario Registrado';
     }
 
-    return 'Usuario Registrado';
+    return 'Sin asignar';
   };
 
-  // Peticiones SWR
+  // Peticiones SWR a los endpoints exactos de tu Swagger
   const { data: rawComentarios = [], mutate: mutateComentarios } = useSWR(
     tareaId ? `/comentarios/?tarea=${tareaId}` : null,
     () => (tareaId ? api.getComentarios(tareaId) : []),
@@ -81,7 +81,7 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
     { revalidateOnFocus: false }
   );
 
-  // Filtrado de cliente
+  // Filtrado estricto en cliente
   const comentarios = Array.isArray(rawComentarios)
     ? rawComentarios.filter((c: any) => {
         const itemTareaId = typeof c.id_tarea === 'object' ? c.id_tarea?.id_tarea : c.id_tarea;
@@ -112,12 +112,12 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
   const [nuevoEstado, setNuevoEstado] = useState<string>('');
   const [nuevoResponsableId, setNuevoResponsableId] = useState<string>('');
 
-  // Identificar responsable asignado real desde la tabla public.asignaciones
+  // Encontrar la asignación activa para esta tarea específica
   const asignacionActiva = Array.isArray(rawAsignaciones) 
-    ? rawAsignaciones.find((a: any) => Number(a.tarea_id || a.id_tarea) === Number(tareaId)) 
+    ? rawAsignaciones.find((a: any) => Number(a.tarea || a.tarea_id || a.id_tarea) === Number(tareaId)) 
     : null;
 
-  const idResponsableReal = asignacionActiva ? (asignacionActiva.usuario_id || asignacionActiva.id_usuario) : tarea?.usuario_asignado;
+  const idResponsableReal = asignacionActiva ? (asignacionActiva.usuario || asignacionActiva.usuario_id || asignacionActiva.id_usuario) : tarea?.usuario_asignado;
 
   useEffect(() => {
     if (tarea) {
@@ -132,7 +132,6 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
     if (!totalMinutos || totalMinutos <= 0) return '0m';
     const hrs = Math.floor(totalMinutos / 60);
     const mins = totalMinutos % 60;
-
     if (hrs === 0) return `${mins}m`;
     if (mins === 0) return `${hrs}h`;
     return `${hrs}h ${mins}m`;
@@ -237,7 +236,6 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
     }
   };
 
-  // Guardar Cambios Gerenciales
   const handleGuardarGestionGerencial = async () => {
     try {
       setLoading(true);
@@ -277,7 +275,7 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
       <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl text-slate-100 overflow-hidden">
         
-        {/* Encabezado sin emojis */}
+        {/* Encabezado */}
         <div className="p-5 border-b border-slate-800 flex items-center justify-between bg-slate-950/50">
           <div>
             <div className="flex items-center gap-2">
@@ -394,7 +392,7 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
 
           </div>
 
-          {/* COLUMNA DERECHA: Control de Tiempo, Evidencias & Gestión Gerencial */}
+          {/* COLUMNA DERECHA */}
           <div className="space-y-6">
             
             {/* BLOQUE DE GESTIÓN GERENCIAL */}
