@@ -188,19 +188,38 @@ class ApiService {
   }
 
   async createAsignacion(data: any) {
-    const response = await this.api.post('/asignaciones/', data);
+    // 🎯 Mapeo inteligente para asegurar que Django reciba 'tarea' y 'usuario'
+    const payload = {
+      tarea: Number(data.tarea || data.id_tarea || data.tarea_id),
+      usuario: String(data.usuario || data.id_usuario || data.usuario_id || data.usuario_asignado || ''),
+      horas_planificadas: Number(data.horas_planificadas || data.horas_estimadas || 0)
+    };
+
+    // Si falta alguno de los campos clave, cancelamos el envío para evitar el 400
+    if (!payload.tarea || !payload.usuario || payload.usuario === 'null' || payload.usuario === 'undefined') {
+      console.warn('[ApiService] Payload de asignación incompleto:', payload);
+      return null;
+    }
+
+    const response = await this.api.post('/asignaciones/', payload);
     return response.data;
   }
 
   async updateAsignacion(id: number, data: any) {
-    const response = await this.api.patch(`/asignaciones/${id}/`, data);
+    const payload = {
+      tarea: Number(data.tarea || data.id_tarea || data.tarea_id),
+      usuario: String(data.usuario || data.id_usuario || data.usuario_id || data.usuario_asignado || ''),
+      horas_planificadas: Number(data.horas_planificadas || 0)
+    };
+
+    const response = await this.api.patch(`/asignaciones/${id}/`, payload);
     return response.data;
   }
 
   async deleteAsignacion(id: number) {
     await this.api.delete(`/asignaciones/${id}/`);
   }
-
+  
   // ==================== REGISTRO DE HORAS ====================
   async getRegistroHoras(tareaId?: number) {
     const params = tareaId ? { tarea: tareaId } : {};
