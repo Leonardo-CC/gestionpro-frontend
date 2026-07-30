@@ -32,9 +32,30 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
   }, []);
   const isManagerOrAdmin = userRole === 'Administrador' || userRole === 'Gerente_Proyecto';
 
-  // Cargar lista de Usuarios para el selector de asignación del Gerente
-  const { data: rawUsuarios = [] } = useSWR(isManagerOrAdmin ? '/usuarios' : null, () => api.getUsuarios());
+  // 👥 Cargar SIEMPRE la lista general de Usuarios para mapear UUIDs a nombres reales
+  const { data: rawUsuarios = [] } = useSWR(tareaId ? '/usuarios' : null, () => api.getUsuarios(), { revalidateOnFocus: false });
   const usuarios = Array.isArray(rawUsuarios) ? rawUsuarios : [];
+
+  // 💡 HELPER DE RESOLUCIÓN EN CLIENTE: Convierte UUIDs en Nombres Reales
+  const resolverNombreEnCliente = (idUsuarioRaw: any, nombreApi?: string) => {
+    if (nombreApi && !['Desarrollador', 'Sin asignar', 'Sin Asignar', 'Usuario', 'Miembro del Equipo'].includes(nombreApi)) {
+      return nombreApi;
+    }
+
+    if (!idUsuarioRaw) return 'Sin asignar';
+
+    const uuidStr = typeof idUsuarioRaw === 'object' 
+      ? String(idUsuarioRaw.id_usuario || idUsuarioRaw.id || '') 
+      : String(idUsuarioRaw);
+
+    const usrEncontrado = usuarios.find((u: any) => String(u.id_usuario) === uuidStr || String(u.id) === uuidStr);
+
+    if (usrEncontrado) {
+      return usrEncontrado.nombre || usrEncontrado.email || 'Usuario Registrado';
+    }
+
+    return 'Usuario Registrado';
+  };
 
   // 2. Declaración de Hooks SWR
   const { data: rawComentarios = [], mutate: mutateComentarios } = useSWR(
@@ -122,6 +143,9 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
   const diferenciaHorasDecimal = estimadasDecimal - totalHorasInvertidasDecimal;
   const esEficiente = diferenciaHorasDecimal >= 0;
 
+  // Responsable resuelto en cliente
+  const responsableActualNombre = resolverNombreEnCliente(tarea.usuario_asignado, tarea.responsable_nombre);
+
   // 💡 UNIFICACIÓN DE EVENTOS EN LA BITÁCORA
   const bitacoraUnificada = (() => {
     const lista: any[] = [];
@@ -129,7 +153,7 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
     comentarios.forEach((c: any) => {
       lista.push({
         id: `com-${c.id_comentario || c.id}`,
-        autor: c.usuario_nombre || 'Desarrollador',
+        autor: resolverNombreEnCliente(c.id_usuario, c.usuario_nombre),
         texto: c.texto_comentario || c.comentario || c.contenido || c.texto,
         fecha: c.fecha_creacion ? new Date(c.fecha_creacion) : new Date(),
       });
@@ -144,7 +168,7 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
       if (!yaExisteEnComentarios && hrsNum > 0) {
         lista.push({
           id: `hrs-${r.id_registro || r.id}`,
-          autor: r.usuario_nombre || 'Desarrollador',
+          autor: resolverNombreEnCliente(r.id_usuario, r.usuario_nombre),
           texto: r.comentario || `⏱️ Se registró un tiempo de +${formatDecimalAHumano(hrsNum)} de trabajo.`,
           fecha: r.fecha_creacion ? new Date(r.fecha_creacion) : new Date(r.fecha),
         });
@@ -372,7 +396,7 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
                   >
                     <option value="">Sin Asignar</option>
                     {usuarios.map((u: any) => (
-                      <option key={u.id_usuario} value={String(u.id_usuario)}>
+                      <option key={u.id_usuario || u.id} value={String(u.id_usuario || u.id)}>
                         {u.nombre || u.email}
                       </option>
                     ))}
@@ -411,7 +435,7 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
               
               <div className="flex justify-between text-xs font-semibold">
                 <span className="text-slate-400 font-medium">Responsable Actual:</span>
-                <span className="text-slate-200 font-bold">{tarea.responsable_nombre || 'Sin asignar'}</span>
+                <span className="text-slate-200 font-bold">{responsableActualNombre}</span>
               </div>
 
               <div className="flex justify-between text-xs font-semibold">
