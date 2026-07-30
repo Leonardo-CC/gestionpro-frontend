@@ -54,11 +54,9 @@ export default function ProyectosPage() {
     fecha_fin: '',
     estado: 'Activo',
     id_gerente: '',
-    cliente: '',
-    alcance: '',
   });
 
-  // 🔒 Obtener el rol y usuario actual
+  // Obtener el rol y usuario actual
   useEffect(() => {
     const role = localStorage.getItem('userRole') || '';
     const userId = localStorage.getItem('userId') || '';
@@ -80,22 +78,18 @@ export default function ProyectosPage() {
       return 0;
     }
 
-    // 1. Obtener todas las tareas del proyecto
     const tareasDelProyecto = tareas.filter(
       (t: any) => Number(t.id_proyecto) === Number(proyectoId)
     );
 
     if (tareasDelProyecto.length === 0) return 0;
 
-    // 2. Calcular costo total basado en horas invertidas x tarifa
     let costoTotal = 0;
     tareasDelProyecto.forEach((tarea: any) => {
-      // Encontrar asignación para esta tarea
       const asignacion = asignaciones.find(
         (a: any) => Number(a.tarea_id || a.tarea) === Number(tarea.id_tarea)
       );
 
-      // Obtener tarifa del usuario asignado
       let tarifaHora = 0;
       if (asignacion) {
         const usuario = usuarios.find(
@@ -104,7 +98,6 @@ export default function ProyectosPage() {
         tarifaHora = usuario ? Number(usuario.tarifa_hora || 0) : 0;
       }
 
-      // Sumar horas invertidas en esta tarea
       const horasInvertidas = registroHoras
         .filter((r: any) => Number(r.id_tarea || r.tarea_id) === Number(tarea.id_tarea))
         .reduce((sum: number, r: any) => sum + Number(r.horas_trabajadas || 0), 0);
@@ -115,7 +108,6 @@ export default function ProyectosPage() {
     return costoTotal;
   };
 
-  // Verificar si tiene permiso de edición (Admin o Gerente)
   const isManagerOrAdmin = userRole === 'Administrador' || userRole === 'Gerente_Proyecto';
 
   const handleProjectFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -153,13 +145,14 @@ export default function ProyectosPage() {
     setLoading(true);
 
     try {
+      // Se envía id_gerente tal como viene (String UUID) sin aplicar parseInt
       await api.createProyecto({
         ...projectForm,
         nombre: nombre.trim(),
         presupuesto_total: monto,
         fecha_inicio,
         fecha_fin: fecha_fin || null,
-        id_gerente: parseInt(id_gerente),
+        id_gerente: id_gerente, 
       });
 
       setSuccess('Proyecto creado exitosamente');
@@ -171,13 +164,11 @@ export default function ProyectosPage() {
         fecha_fin: '',
         estado: 'Activo',
         id_gerente: userRole === 'Gerente_Proyecto' ? currentUserId : '',
-        cliente: '',
-        alcance: '',
       });
       setIsModalOpen(false);
       mutateProyectos();
     } catch (err: any) {
-      setError(err?.response?.data?.detail || 'Error al crear el proyecto');
+      setError(err?.response?.data?.detail || JSON.stringify(err?.response?.data) || 'Error al crear el proyecto');
     } finally {
       setLoading(false);
     }
@@ -213,7 +204,6 @@ export default function ProyectosPage() {
           <p className="text-slate-400 text-xs mt-1">Control de iniciativas, consumos financieros y cronogramas</p>
         </div>
 
-        {/* 🔒 BOTÓN SOLO VISIBLE PARA ADMIN O GERENTE */}
         {isManagerOrAdmin && (
           <Button onClick={() => setIsModalOpen(true)} size="sm" className="bg-blue-600 hover:bg-blue-500 shadow-md flex items-center gap-1.5">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -337,7 +327,6 @@ export default function ProyectosPage() {
                   </div>
                 </div>
 
-                {/* 🔒 BOTÓN "ELIMINAR" SOLO VISIBLE PARA ADMIN O GERENTE */}
                 {isManagerOrAdmin && (
                   <div className="flex items-center gap-3 self-end lg:self-center">
                     <button
@@ -359,7 +348,7 @@ export default function ProyectosPage() {
         )}
       </div>
 
-      {/* Modal solo accionable por Admin/Gerente */}
+      {/* Modal para Crear Proyecto */}
       {isManagerOrAdmin && (
         <Modal
           isOpen={isModalOpen}
@@ -379,36 +368,6 @@ export default function ProyectosPage() {
                 className="w-full px-3 py-2 bg-slate-950 border border-slate-700/80 rounded-lg text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder-slate-500"
                 required
               />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Cliente</label>
-                <input
-                  type="text"
-                  name="cliente"
-                  value={projectForm.cliente}
-                  onChange={handleProjectFormChange}
-                  placeholder="Nombre del cliente"
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700/80 rounded-lg text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Alcance</label>
-                <select
-                  name="alcance"
-                  value={projectForm.alcance}
-                  onChange={handleProjectFormChange}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700/80 rounded-lg text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Seleccionar...</option>
-                  <option value="Pequeño">Pequeño (&lt; 40 horas)</option>
-                  <option value="Mediano">Mediano (40-160 horas)</option>
-                  <option value="Grande">Grande (160-400 horas)</option>
-                  <option value="Muy Grande">&gt; 400 horas</option>
-                </select>
-              </div>
             </div>
 
             <div>
@@ -450,7 +409,7 @@ export default function ProyectosPage() {
                 <label className="block text-xs font-semibold text-slate-300 mb-1">Gerente del Proyecto *</label>
                 {userRole === 'Gerente_Proyecto' ? (
                   <div className="px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-slate-100 text-sm">
-                    {usuarios.find((u: any) => String(u.id_usuario) === projectForm.id_gerente)?.nombre || 'Cargando...'}
+                    {usuarios.find((u: any) => String(u.id_usuario) === String(projectForm.id_gerente))?.nombre || 'Cargando...'}
                   </div>
                 ) : (
                   <select
