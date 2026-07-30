@@ -328,7 +328,7 @@ class ApiService {
   async createComentario(data: any) {
     // Validar que tenemos ID de tarea y texto
     const tareaId = Number(data.id_tarea || data.tarea || data.tarea_id);
-    const texto = String(data.texto_comentario || data.comentario || '').trim();
+    const texto = String(data.texto_comentario || data.comentario || data.texto || '').trim();
 
     if (!tareaId || tareaId <= 0) {
       throw new Error('ID de tarea inválido');
@@ -339,8 +339,8 @@ class ApiService {
 
     // Payload limpio - solo campos que Django espera
     const payload = {
-      tarea: tareaId,
-      texto: texto,
+      id_tarea: tareaId,
+      texto_comentario: texto,
     };
 
     const response = await this.api.post('/comentarios/', payload);
@@ -370,7 +370,7 @@ class ApiService {
     }
 
     const formData = new FormData();
-    formData.append('tarea', tareaId.toString());
+    formData.append('id_tarea', tareaId.toString());
     formData.append('archivo', file);
     
     // IMPORTANTE: No establecer Content-Type header - dejar que axios lo maneje con el boundary correcto
