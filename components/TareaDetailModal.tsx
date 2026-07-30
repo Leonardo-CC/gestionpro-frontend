@@ -225,9 +225,8 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
       if (comentarioLimpio) {
         try {
           await api.createComentario({
-            id_tarea: tarea.id_tarea,
-            texto_comentario: comentarioLimpio,
-            comentario: comentarioLimpio,
+            tarea: tarea.id_tarea,
+            texto: comentarioLimpio,
           });
         } catch (err: any) {
           console.error('[v0] Error al crear comentario:', err);
@@ -239,7 +238,7 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
       if (horasParaBackend > 0) {
         try {
           await api.createRegistroHoras({
-            id_tarea: tarea.id_tarea,
+            tarea: tarea.id_tarea,
             horas_trabajadas: horasParaBackend,
             fecha: new Date().toISOString().split('T')[0],
             comentario: comentarioLimpio || `Tiempo registrado (+${formatTiempoHumano(minutosAHoras)})`,

@@ -285,7 +285,28 @@ class ApiService {
   }
 
   async createRegistroHoras(data: any) {
-    const response = await this.api.post('/registro-horas/', data);
+    // Validar datos requeridos
+    const tareaId = Number(data.id_tarea || data.tarea);
+    const horas = Number(data.horas_trabajadas || data.horas || 0);
+    const fecha = data.fecha || new Date().toISOString().split('T')[0];
+    const comentario = String(data.comentario || '').trim();
+
+    if (!tareaId || tareaId <= 0) {
+      throw new Error('ID de tarea inválido para registro de horas');
+    }
+    if (horas <= 0) {
+      throw new Error('Las horas deben ser mayor a 0');
+    }
+
+    // Payload limpio - solo campos que Django espera
+    const payload = {
+      tarea: tareaId,
+      horas_trabajadas: horas,
+      fecha: fecha,
+      comentario: comentario,
+    };
+
+    const response = await this.api.post('/registro-horas/', payload);
     return response.data;
   }
 
@@ -316,12 +337,10 @@ class ApiService {
       throw new Error('El comentario no puede estar vacío');
     }
 
-    // Payload normalizado para Django
+    // Payload limpio - solo campos que Django espera
     const payload = {
-      id_tarea: tareaId,
-      tarea: tareaId, // Algunos endpoints pueden usar 'tarea' en lugar de 'id_tarea'
-      texto_comentario: texto,
-      comentario: texto, // Algunos campos pueden esperarse bajo este nombre
+      tarea: tareaId,
+      texto: texto,
     };
 
     const response = await this.api.post('/comentarios/', payload);
@@ -346,10 +365,13 @@ class ApiService {
     if (file.size > 50 * 1024 * 1024) { // 50MB limit
       throw new Error('El archivo es demasiado grande (máximo 50MB)');
     }
+    if (!tareaId || tareaId <= 0) {
+      throw new Error('ID de tarea inválido para archivo');
+    }
 
     const formData = new FormData();
-    formData.append('archivo', file);
     formData.append('tarea', tareaId.toString());
+    formData.append('archivo', file);
     
     // IMPORTANTE: No establecer Content-Type header - dejar que axios lo maneje con el boundary correcto
     const response = await this.api.post('/archivos/', formData);
