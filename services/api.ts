@@ -1,4 +1,11 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
+import { createClient } from '@supabase/supabase-js';
+
+// Inicialización del cliente de Supabase Storage para carga de binarios reales
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://lakagszxhigkmvyotbnf.supabase.co';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxha2Fnc3p4aGlna212eW90Ym5mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUwMTMyNDcsImV4cCI6MjEwMDU4OTI0N30.hTTFj8SJV9b7XW_hPuiyjDK2rRjDa365S7yqjgI03ns';
+
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 interface ApiResponse<T> {
   data: T;
@@ -106,11 +113,9 @@ class ApiService {
     return Array.isArray(usuarios) ? usuarios[0] : {};
   }
 
-  // 💡 NUEVO MÉTODO: Actualizar perfil del usuario autenticado
   async updatePerfil(data: { nombre?: string; password?: string; [key: string]: any }) {
     if (typeof window === 'undefined') throw new Error('No disponible en servidor');
 
-    // 1. Obtener perfil para conocer el id_usuario actual
     const perfilActual = await this.getPerfil();
     const idUsuario = perfilActual?.id_usuario || localStorage.getItem('userId');
 
@@ -118,13 +123,11 @@ class ApiService {
       throw new Error('No se pudo determinar el ID del usuario en sesión.');
     }
 
-    // 2. Mapear 'password' si viene del formulario
     const payload: any = { ...data };
     if (payload.password) {
       payload.password = payload.password;
     }
 
-    // 3. Enviar actualización vía PATCH a Django
     const response = await this.api.patch(`/usuarios/${idUsuario}/`, payload);
     return response.data;
   }
@@ -144,19 +147,16 @@ class ApiService {
       
       if (!userId) return [];
 
-      // Get all projects
       const allProyectos = await this.getProyectos();
       
-      // If admin, show all projects
+      // Si es admin, ve todos los proyectos
       if (userRole === 'Administrador') {
         return allProyectos;
       }
 
       if (!Array.isArray(allProyectos)) return [];
 
-      // If Gerente_Proyecto or Miembro, filter by:
-      // 1. Projects where they are the manager (id_gerente)
-      // 2. Projects where they have tasks assigned
+      // Filtrado para Gerente o Miembro de Equipo
       const tareas = await this.getTareas();
       const asignaciones = await this.getAsignaciones();
 
@@ -175,7 +175,6 @@ class ApiService {
         });
       }
 
-      // Filter projects: manager OR has task assignment
       return allProyectos.filter((proyecto: any) => {
         const isManager = String(proyecto.id_gerente) === String(userId);
         const hasTaskAssignment = projectIdsFromTasks.has(Number(proyecto.id_proyecto));
@@ -188,7 +187,6 @@ class ApiService {
   }
 
   async getProyectosAccesibles() {
-    // Alias para compatibilidad hacia atrás
     return this.getProyectosAccesiblesCompleto();
   }
 
@@ -245,14 +243,12 @@ class ApiService {
   }
 
   async createAsignacion(data: any) {
-    // 🎯 Mapeo inteligente para asegurar que Django reciba 'tarea' y 'usuario'
     const payload = {
       tarea: Number(data.tarea || data.id_tarea || data.tarea_id),
       usuario: String(data.usuario || data.id_usuario || data.usuario_id || data.usuario_asignado || ''),
       horas_planificadas: Number(data.horas_planificadas || data.horas_estimadas || 0)
     };
 
-    // Si falta alguno de los campos clave, cancelamos el envío para evitar el 400
     if (!payload.tarea || !payload.usuario || payload.usuario === 'null' || payload.usuario === 'undefined') {
       console.warn('[ApiService] Payload de asignación incompleto:', payload);
       return null;
@@ -276,7 +272,7 @@ class ApiService {
   async deleteAsignacion(id: number) {
     await this.api.delete(`/asignaciones/${id}/`);
   }
-  
+
   // ==================== REGISTRO DE HORAS ====================
   async getRegistroHoras(tareaId?: number) {
     const params = tareaId ? { tarea: tareaId } : {};
@@ -285,26 +281,31 @@ class ApiService {
   }
 
   async createRegistroHoras(data: any) {
-    // Validar datos requeridos
-    const tareaId = Number(data.id_tarea || data.tarea);
+    const tareaId = Number(data.id_tarea || data.tarea || data.tarea_id);
     const horas = Number(data.horas_trabajadas || data.horas || 0);
     const fecha = data.fecha || new Date().toISOString().split('T')[0];
     const comentario = String(data.comentario || '').trim();
+    
+    const currentUserId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
 
     if (!tareaId || tareaId <= 0) {
       throw new Error('ID de tarea inválido para registro de horas');
     }
     if (horas <= 0) {
-      throw new Error('Las horas deben ser mayor a 0');
+      throw new Error('Las horas trabajadas deben ser mayores a 0');
     }
 
-    // Payload limpio - solo campos que Django espera
-    const payload = {
-      tarea: tareaId,
+    const payload: any = {
+      id_tarea: tareaId,
       horas_trabajadas: horas,
       fecha: fecha,
-      comentario: comentario,
+      comentario: comentario || 'Registro de horas'
     };
+
+    const userIdFinal = data.id_usuario || currentUserId;
+    if (userIdFinal) {
+      payload.id_usuario = String(userIdFinal);
+    }
 
     const response = await this.api.post('/registro-horas/', payload);
     return response.data;
@@ -326,22 +327,27 @@ class ApiService {
   }
 
   async createComentario(data: any) {
-    // Validar que tenemos ID de tarea y texto
+    const currentUserId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
+
     const tareaId = Number(data.id_tarea || data.tarea || data.tarea_id);
     const texto = String(data.texto_comentario || data.comentario || data.texto || '').trim();
 
     if (!tareaId || tareaId <= 0) {
-      throw new Error('ID de tarea inválido');
+      throw new Error('ID de tarea inválido para crear comentario');
     }
     if (!texto) {
       throw new Error('El comentario no puede estar vacío');
     }
 
-    // Payload limpio - solo campos que Django espera
-    const payload = {
+    const payload: any = {
       id_tarea: tareaId,
       texto_comentario: texto,
     };
+
+    const userIdFinal = data.id_usuario || currentUserId;
+    if (userIdFinal) {
+      payload.id_usuario = String(userIdFinal);
+    }
 
     const response = await this.api.post('/comentarios/', payload);
     return response.data;
@@ -357,24 +363,65 @@ class ApiService {
     return response.data;
   }
 
-  async uploadArchivo(tareaId: number, file: File) {
-    // Validación básica
-    if (!file || file.size === 0) {
-      throw new Error('El archivo no puede estar vacío');
-    }
-    if (file.size > 50 * 1024 * 1024) { // 50MB limit
-      throw new Error('El archivo es demasiado grande (máximo 50MB)');
-    }
+  async uploadArchivo(tareaId: number, fileOrUrl: File | string, nombrePersonalizado?: string) {
     if (!tareaId || tareaId <= 0) {
       throw new Error('ID de tarea inválido para archivo');
     }
 
-    const formData = new FormData();
-    formData.append('id_tarea', tareaId.toString());
-    formData.append('archivo', file);
-    
-    // IMPORTANTE: No establecer Content-Type header - dejar que axios lo maneje con el boundary correcto
-    const response = await this.api.post('/archivos/', formData);
+    const currentUserId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
+
+    // Caso A: Si se le pasa un archivo File real (subida física a Supabase Storage + metadata en DRF)
+    if (fileOrUrl instanceof File) {
+      const cleanFileName = fileOrUrl.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const filePath = `tarea_${tareaId}/${Date.now()}_${cleanFileName}`;
+
+      // 1. Subida directa al Bucket 'archivos-tareas'
+      const { data: storageData, error: storageError } = await supabase.storage
+        .from('archivos-tareas')
+        .upload(filePath, fileOrUrl, {
+          cacheControl: '3600',
+          upsert: true
+        });
+
+      if (storageError) {
+        console.error('[Supabase Storage Error]:', storageError);
+        throw new Error(`Error en el almacenamiento de Supabase: ${storageError.message}`);
+      }
+
+      // 2. Obtener la URL pública oficial de Supabase Storage
+      const { data: publicUrlData } = supabase.storage
+        .from('archivos-tareas')
+        .getPublicUrl(filePath);
+
+      const urlPublicaReal = publicUrlData.publicUrl;
+
+      // 3. Registrar metadata en PostgreSQL vía la API de Django
+      const payload: any = {
+        id_tarea: tareaId,
+        url_archivo: urlPublicaReal,
+        nombre_archivo: fileOrUrl.name
+      };
+
+      if (currentUserId) {
+        payload.id_usuario = String(currentUserId);
+      }
+
+      const response = await this.api.post('/archivos/', payload);
+      return response.data;
+    } 
+
+    // Caso B: Si se pasa una URL de texto directo
+    const payload: any = {
+      id_tarea: tareaId,
+      url_archivo: String(fileOrUrl),
+      nombre_archivo: nombrePersonalizado || 'Documento adjunto'
+    };
+
+    if (currentUserId) {
+      payload.id_usuario = String(currentUserId);
+    }
+
+    const response = await this.api.post('/archivos/', payload);
     return response.data;
   }
 

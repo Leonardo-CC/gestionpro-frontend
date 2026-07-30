@@ -219,20 +219,51 @@ class ComentariosTareaSerializer(serializers.ModelSerializer):
     def get_usuario_nombre(self, obj):
         return resolver_nombre_usuario(obj.id_usuario)
 
+    def create(self, validated_data):
+        # Inyectar id_usuario desde la petición si no se especificó en el payload
+        request = self.context.get('request')
+        if not validated_data.get('id_usuario') and request and hasattr(request, 'user'):
+            user_obj = request.user
+            user_id = getattr(user_obj, 'id_usuario', getattr(user_obj, 'id', None))
+            if user_id:
+                validated_data['id_usuario'] = str(user_id)
+                
+        return super().create(validated_data)
+
 
 class ArchivosTareaSerializer(serializers.ModelSerializer):
     usuario_nombre = serializers.SerializerMethodField()
+    url_archivo = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = ArchivosTarea
         fields = '__all__'
         extra_kwargs = {
-            'id_usuario': {'required': False}
+            'id_usuario': {'required': False},
+            'url_archivo': {'required': False}
         }
 
     def get_usuario_nombre(self, obj):
         return resolver_nombre_usuario(obj.id_usuario)
 
+    def create(self, validated_data):
+        request = self.context.get('request')
+        
+        # 1. Inyectar usuario en sesión si falta
+        if not validated_data.get('id_usuario') and request and hasattr(request, 'user'):
+            user_obj = request.user
+            user_id = getattr(user_obj, 'id_usuario', getattr(user_obj, 'id', None))
+            if user_id:
+                validated_data['id_usuario'] = str(user_id)
+
+        # 2. Generar una URL por defecto si viene un archivo subido por multipart
+        if not validated_data.get('url_archivo'):
+            nombre = validated_data.get('nombre_archivo', 'archivo_adjunto')
+            id_tarea = validated_data.get('id_tarea')
+            tarea_id_str = getattr(id_tarea, 'id_tarea', id_tarea)
+            validated_data['url_archivo'] = f"https://supabase.co/storage/v1/object/public/archivos-tareas/tarea_{tarea_id_str}/{nombre}"
+
+        return super().create(validated_data)
 
 class RegistroHorasSerializer(serializers.ModelSerializer):
     usuario_nombre = serializers.SerializerMethodField()
@@ -247,6 +278,16 @@ class RegistroHorasSerializer(serializers.ModelSerializer):
     def get_usuario_nombre(self, obj):
         return resolver_nombre_usuario(obj.id_usuario)
 
+    def create(self, validated_data):
+        # Inyectar id_usuario si no viene en el payload
+        request = self.context.get('request')
+        if not validated_data.get('id_usuario') and request and hasattr(request, 'user'):
+            user_obj = request.user
+            user_id = getattr(user_obj, 'id_usuario', getattr(user_obj, 'id', None))
+            if user_id:
+                validated_data['id_usuario'] = str(user_id)
+                
+        return super().create(validated_data)
 
 class HistorialPresupuestoSerializer(serializers.ModelSerializer):
     usuario_nombre = serializers.SerializerMethodField()
