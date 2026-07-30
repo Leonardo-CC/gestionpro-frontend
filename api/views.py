@@ -116,10 +116,11 @@ class ComentariosTareaViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = ComentariosTarea.objects.all().order_by('-fecha_creacion')
-        # 💡 Soporta tanto ?tarea=ID como ?id_tarea=ID para el filtro del modal
+        # 💡 Extraer el ID independientemente de cómo venga en la URL
         tarea_id = self.request.query_params.get('tarea') or self.request.query_params.get('id_tarea')
-        if tarea_id is not None:
-            queryset = queryset.filter(id_tarea=tarea_id)
+        if tarea_id is not None and tarea_id != '':
+            # 🎯 USAR id_tarea_id PARA RECONOCER EL FK EN DJANGO
+            queryset = queryset.filter(id_tarea_id=int(tarea_id))
         return queryset
 
     def perform_create(self, serializer):
@@ -138,8 +139,8 @@ class ArchivosTareaViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = ArchivosTarea.objects.all().order_by('-fecha_subida')
         tarea_id = self.request.query_params.get('tarea') or self.request.query_params.get('id_tarea')
-        if tarea_id is not None:
-            queryset = queryset.filter(id_tarea=tarea_id)
+        if tarea_id is not None and tarea_id != '':
+            queryset = queryset.filter(id_tarea_id=int(tarea_id))
         return queryset
 
     def perform_create(self, serializer):
@@ -158,8 +159,8 @@ class RegistroHorasViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = RegistroHoras.objects.all().order_by('-fecha_creacion')
         tarea_id = self.request.query_params.get('tarea') or self.request.query_params.get('id_tarea')
-        if tarea_id is not None:
-            queryset = queryset.filter(id_tarea=tarea_id)
+        if tarea_id is not None and tarea_id != '':
+            queryset = queryset.filter(id_tarea_id=int(tarea_id))
         return queryset
 
     def perform_create(self, serializer):
