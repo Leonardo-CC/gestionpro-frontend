@@ -24,6 +24,18 @@ export default function ProyectosPage() {
   const { data: proyectos = [], mutate: mutateProyectos } = useSWR('/proyectos', () => api.getProyectos(), {
     revalidateOnFocus: false,
   });
+  const { data: usuarios = [] } = useSWR('/usuarios', () => api.getUsuarios(), {
+    revalidateOnFocus: false,
+  });
+  const { data: asignaciones = [] } = useSWR('/asignaciones', () => api.getAsignaciones(), {
+    revalidateOnFocus: false,
+  });
+  const { data: registroHoras = [] } = useSWR('/registro-horas', () => api.getRegistroHoras(), {
+    revalidateOnFocus: false,
+  });
+  const { data: tareas = [] } = useSWR('/tareas', () => api.getTareas(), {
+    revalidateOnFocus: false,
+  });
 
   const [userRole, setUserRole] = useState<string>('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -45,6 +57,47 @@ export default function ProyectosPage() {
     const role = localStorage.getItem('userRole') || '';
     setUserRole(role);
   }, []);
+
+  // Función para calcular el costo invertido de un proyecto
+  const calcularCostoInvertido = (proyectoId: number): number => {
+    if (!Array.isArray(tareas) || !Array.isArray(asignaciones) || !Array.isArray(registroHoras) || !Array.isArray(usuarios)) {
+      return 0;
+    }
+
+    // 1. Obtener todas las tareas del proyecto
+    const tareasDelProyecto = tareas.filter(
+      (t: any) => Number(t.id_proyecto) === Number(proyectoId)
+    );
+
+    if (tareasDelProyecto.length === 0) return 0;
+
+    // 2. Calcular costo total basado en horas invertidas x tarifa
+    let costoTotal = 0;
+    tareasDelProyecto.forEach((tarea: any) => {
+      // Encontrar asignación para esta tarea
+      const asignacion = asignaciones.find(
+        (a: any) => Number(a.tarea_id || a.tarea) === Number(tarea.id_tarea)
+      );
+
+      // Obtener tarifa del usuario asignado
+      let tarifaHora = 0;
+      if (asignacion) {
+        const usuario = usuarios.find(
+          (u: any) => String(u.id_usuario) === String(asignacion.usuario_id || asignacion.usuario)
+        );
+        tarifaHora = usuario ? Number(usuario.tarifa_hora || 0) : 0;
+      }
+
+      // Sumar horas invertidas en esta tarea
+      const horasInvertidas = registroHoras
+        .filter((r: any) => Number(r.id_tarea || r.tarea_id) === Number(tarea.id_tarea))
+        .reduce((sum: number, r: any) => sum + Number(r.horas_trabajadas || 0), 0);
+
+      costoTotal += horasInvertidas * tarifaHora;
+    });
+
+    return costoTotal;
+  };
 
   // Verificar si tiene permiso de edición (Admin o Gerente)
   const isManagerOrAdmin = userRole === 'Administrador' || userRole === 'Gerente_Proyecto';
@@ -155,7 +208,7 @@ export default function ProyectosPage() {
         {Array.isArray(proyectos) && proyectos.length > 0 ? (
           proyectos.map((proyecto: Proyecto) => {
             const presTotal = Number(proyecto.presupuesto_total || 0);
-            const costoInvertido = Number(proyecto.costo_invertido || 0);
+            const costoInvertido = calcularCostoInvertido(proyecto.id_proyecto);
             const saldoRestante = presTotal - costoInvertido;
             const porcentajeConsumido = presTotal > 0 ? Math.min(Math.round((costoInvertido / presTotal) * 100), 100) : 0;
             const sobrepasado = costoInvertido > presTotal && presTotal > 0;

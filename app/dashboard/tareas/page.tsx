@@ -57,17 +57,57 @@ function TareasContent() {
     revalidateOnFocus: false,
   });
 
-  // 3. Cargar Tareas
+  // 3. Cargar Tareas + Asignaciones + Registros de Horas
   const [tareas, setTareas] = useState<Tarea[]>([]);
   const [loadingTareas, setLoadingTareas] = useState(false);
 
   const loadTareas = async () => {
     setLoadingTareas(true);
     try {
-      const data = await api.getTareas();
-      setTareas(Array.isArray(data) ? data : []);
+      const [tareasData, asignacionesData, registrosHorasData] = await Promise.all([
+        api.getTareas(),
+        api.getAsignaciones(undefined), // Get all assignments
+        api.getRegistroHoras(undefined), // Get all hour records
+      ]);
+
+      const tareasArray = Array.isArray(tareasData) ? tareasData : [];
+      const asignacionesArray = Array.isArray(asignacionesData) ? asignacionesData : [];
+      const registrosArray = Array.isArray(registrosHorasData) ? registrosHorasData : [];
+
+      // Enriquecer tareas con asignaciones y horas invertidas
+      const tareasEnriquecidas = tareasArray.map((tarea: any) => {
+        // Buscar asignación para esta tarea
+        const asignacion = asignacionesArray.find(
+          (a: any) => Number(a.tarea_id || a.tarea) === Number(tarea.id_tarea)
+        );
+
+        // Resolver nombre del usuario asignado
+        let responsable_nombre = tarea.responsable_nombre || 'Sin asignar';
+        if (asignacion && Array.isArray(usuarios) && usuarios.length > 0) {
+          const usuarioAsignado = usuarios.find(
+            (u: any) => String(u.id_usuario) === String(asignacion.usuario_id || asignacion.usuario)
+          );
+          if (usuarioAsignado) {
+            responsable_nombre = usuarioAsignado.nombre || usuarioAsignado.email || 'Sin asignar';
+          }
+        }
+
+        // Calcular horas invertidas
+        const horasInvertidas = registrosArray
+          .filter((r: any) => Number(r.id_tarea || r.tarea_id) === Number(tarea.id_tarea))
+          .reduce((sum: number, r: any) => sum + Number(r.horas_trabajadas || 0), 0);
+
+        return {
+          ...tarea,
+          responsable_nombre,
+          horas_invertidas: horasInvertidas,
+        };
+      });
+
+      setTareas(tareasEnriquecidas);
     } catch (e) {
       console.error('Error cargando las tareas:', e);
+      setTareas([]);
     } finally {
       setLoadingTareas(false);
     }

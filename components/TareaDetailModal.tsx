@@ -34,10 +34,10 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
   const { data: rawUsuarios = [] } = useSWR(tareaId ? '/usuarios' : null, () => api.getUsuarios(), { revalidateOnFocus: false });
   const usuarios = Array.isArray(rawUsuarios) ? rawUsuarios : [];
 
-  // Cargar asignaciones filtradas o la lista general de asignaciones
+  // Cargar asignaciones filtradas por tarea
   const { data: rawAsignaciones = [], mutate: mutateAsignaciones } = useSWR(
     tareaId ? `/asignaciones/?tarea=${tareaId}` : null,
-    () => api.getAsignaciones ? api.getAsignaciones() : [],
+    () => (tareaId ? api.getAsignaciones(tareaId) : []),
     { revalidateOnFocus: false }
   );
 
@@ -113,11 +113,16 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
   const [nuevoResponsableId, setNuevoResponsableId] = useState<string>('');
 
   // Encontrar la asignación activa para esta tarea específica
-  const asignacionActiva = Array.isArray(rawAsignaciones) 
-    ? rawAsignaciones.find((a: any) => Number(a.tarea || a.tarea_id || a.id_tarea) === Number(tareaId)) 
+  const asignacionActiva = Array.isArray(rawAsignaciones) && rawAsignaciones.length > 0
+    ? rawAsignaciones.find((a: any) => {
+        const tareaIdInAsignacion = a.tarea_id || a.tarea || a.id_tarea;
+        return Number(tareaIdInAsignacion) === Number(tareaId);
+      })
     : null;
 
-  const idResponsableReal = asignacionActiva ? (asignacionActiva.usuario || asignacionActiva.usuario_id || asignacionActiva.id_usuario) : tarea?.usuario_asignado;
+  const idResponsableReal = asignacionActiva 
+    ? (asignacionActiva.usuario_id || asignacionActiva.usuario || asignacionActiva.id_usuario) 
+    : tarea?.usuario_asignado;
 
   useEffect(() => {
     if (tarea) {
@@ -153,6 +158,14 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
   const esEficiente = diferenciaHorasDecimal >= 0;
 
   const responsableActualNombre = resolverNombreEnCliente(idResponsableReal, tarea.responsable_nombre);
+
+  // Obtener tarifa del responsable actual
+  const responsableActual = usuarios.find(
+    (u: any) => String(u.id_usuario) === String(idResponsableReal)
+  );
+  const tarifaResponsable = responsableActual ? Number(responsableActual.tarifa_hora || 0) : 0;
+  const costoInvertido = totalHorasInvertidasDecimal * tarifaResponsable;
+  const costoEstimado = estimadasDecimal * tarifaResponsable;
 
   const bitacoraUnificada = (() => {
     const lista: any[] = [];
@@ -241,20 +254,45 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
       setLoading(true);
       setError('');
 
+      // 1. Actualizar estado de la tarea
       const payload: any = { 
         estado: nuevoEstado,
-        usuario_asignado: nuevoResponsableId || null 
       };
-
       await api.updateTarea(tarea.id_tarea, payload);
 
-      mutateAsignaciones();
-      mutateComentarios();
+      // 2. Manejar asignación del responsable
+      if (nuevoResponsableId) {
+        if (asignacionActiva) {
+          // Actualizar asignación existente
+          const asignacionId = asignacionActiva.id || asignacionActiva.id_asignacion;
+          await api.updateAsignacion(asignacionId, {
+            usuario_id: nuevoResponsableId,
+            horas_planificadas: asignacionActiva.horas_planificadas || 0,
+          });
+        } else {
+          // Crear nueva asignación
+          await api.createAsignacion({
+            tarea_id: tarea.id_tarea,
+            usuario_id: nuevoResponsableId,
+            horas_planificadas: 0,
+          });
+        }
+      } else if (asignacionActiva) {
+        // Eliminar asignación si se deasigna
+        const asignacionId = asignacionActiva.id || asignacionActiva.id_asignacion;
+        await api.deleteAsignacion(asignacionId);
+      }
+
+      // Esperar a que se revaliden los datos antes de cerrar
+      await Promise.all([
+        mutateAsignaciones(),
+        mutateComentarios(),
+      ]);
       
       if (onUpdateSuccess) onUpdateSuccess();
       onClose();
     } catch (err) {
-      console.error('Error al actualizar gestión de tarea:', err);
+      console.error('[v0] Error al actualizar gestión de tarea:', err);
       setError('Error al actualizar el responsable o el estado.');
     } finally {
       setLoading(false);
@@ -460,6 +498,22 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
                 <span className="text-slate-400">Estimadas:</span>
                 <span className="text-slate-200 font-bold font-mono">{estimadasDecimal > 0 ? formatDecimalAHumano(estimadasDecimal) : 'Sin estimar'}</span>
               </div>
+
+              {tarifaResponsable > 0 && (
+                <div className="pt-2 border-t border-slate-800 space-y-2">
+                  <span className="text-[10px] text-slate-500 block">Inversión en Costo (Horas × Tarifa):</span>
+                  <div className="flex justify-between text-xs font-semibold">
+                    <span className="text-slate-400">Costo Invertido:</span>
+                    <span className="text-amber-400 font-mono">${costoInvertido.toFixed(2)}</span>
+                  </div>
+                  {estimadasDecimal > 0 && (
+                    <div className="flex justify-between text-xs font-semibold">
+                      <span className="text-slate-400">Costo Estimado:</span>
+                      <span className="text-slate-300 font-mono">${costoEstimado.toFixed(2)}</span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {estimadasDecimal > 0 && (totalHorasInvertidasDecimal > 0 || tarea.estado === 'FINALIZADO') && (
                 <div className="pt-2 border-t border-slate-900">
