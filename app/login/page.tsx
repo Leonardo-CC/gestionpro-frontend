@@ -38,11 +38,24 @@ export default function LoginPage() {
           localStorage.setItem('userName', userObj.nombre || userObj.nombre_usuario || userObj.username);
         }
 
+        if (userObj.email) {
+          localStorage.setItem('userEmail', userObj.email);
+        }
+
         if (userObj.rol) {
           localStorage.setItem('userRole', userObj.rol);
         }
 
-        router.push('/dashboard');
+        // Verificar si el usuario está activo
+        const isActive = userObj.activo !== false && userObj.tarifa_hora;
+        localStorage.setItem('userActive', isActive ? 'true' : 'false');
+
+        // Si no está activo, redirigir a pending-approval
+        if (!isActive) {
+          router.push('/pending-approval');
+        } else {
+          router.push('/dashboard');
+        }
       } else {
         setError('No se recibió el token de autenticación del servidor');
       }

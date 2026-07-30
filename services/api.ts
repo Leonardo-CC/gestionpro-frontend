@@ -135,7 +135,7 @@ class ApiService {
     return response.data;
   }
 
-  async getProyectosAccesibles() {
+  async getProyectosAccesiblesCompleto() {
     try {
       if (typeof window === 'undefined') return [];
       
@@ -185,6 +185,11 @@ class ApiService {
       console.error('Error fetching accessible projects:', error);
       return [];
     }
+  }
+
+  async getProyectosAccesibles() {
+    // Alias para compatibilidad hacia atrás
+    return this.getProyectosAccesiblesCompleto();
   }
 
   async getProyecto(id: number) {
@@ -300,7 +305,26 @@ class ApiService {
   }
 
   async createComentario(data: any) {
-    const response = await this.api.post('/comentarios/', data);
+    // Validar que tenemos ID de tarea y texto
+    const tareaId = Number(data.id_tarea || data.tarea || data.tarea_id);
+    const texto = String(data.texto_comentario || data.comentario || '').trim();
+
+    if (!tareaId || tareaId <= 0) {
+      throw new Error('ID de tarea inválido');
+    }
+    if (!texto) {
+      throw new Error('El comentario no puede estar vacío');
+    }
+
+    // Payload normalizado para Django
+    const payload = {
+      id_tarea: tareaId,
+      tarea: tareaId, // Algunos endpoints pueden usar 'tarea' en lugar de 'id_tarea'
+      texto_comentario: texto,
+      comentario: texto, // Algunos campos pueden esperarse bajo este nombre
+    };
+
+    const response = await this.api.post('/comentarios/', payload);
     return response.data;
   }
 
@@ -315,13 +339,20 @@ class ApiService {
   }
 
   async uploadArchivo(tareaId: number, file: File) {
+    // Validación básica
+    if (!file || file.size === 0) {
+      throw new Error('El archivo no puede estar vacío');
+    }
+    if (file.size > 50 * 1024 * 1024) { // 50MB limit
+      throw new Error('El archivo es demasiado grande (máximo 50MB)');
+    }
+
     const formData = new FormData();
     formData.append('archivo', file);
     formData.append('tarea', tareaId.toString());
     
-    const response = await this.api.post('/archivos/', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
+    // IMPORTANTE: No establecer Content-Type header - dejar que axios lo maneje con el boundary correcto
+    const response = await this.api.post('/archivos/', formData);
     return response.data;
   }
 

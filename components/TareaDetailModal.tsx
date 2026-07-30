@@ -200,8 +200,16 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
 
   const handleRegistrarAvanceCompleto = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validación inicial
     if (!comentarioTexto.trim() && minutosAHoras <= 0 && !archivoEvidencia) {
       setError('Por favor ingresa un comentario de avance, tiempo o adjunta una evidencia.');
+      return;
+    }
+
+    // Validar que tarea tenga ID válido
+    if (!tarea?.id_tarea || Number(tarea.id_tarea) <= 0) {
+      setError('Error: Tarea inválida. Recarga la página.');
       return;
     }
 
@@ -210,40 +218,72 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
 
     try {
       const horasParaBackend = minutosAHoras > 0 ? minutosAHoras / 60 : 0;
+      const comentarioLimpio = comentarioTexto.trim();
+      const erroresRegistro = [];
 
-      if (comentarioTexto.trim()) {
-        await api.createComentario({
-          id_tarea: tarea.id_tarea,
-          texto_comentario: comentarioTexto.trim(),
-          comentario: comentarioTexto.trim(),
-        });
+      // 1. Registrar comentario si existe
+      if (comentarioLimpio) {
+        try {
+          await api.createComentario({
+            id_tarea: tarea.id_tarea,
+            texto_comentario: comentarioLimpio,
+            comentario: comentarioLimpio,
+          });
+        } catch (err: any) {
+          console.error('[v0] Error al crear comentario:', err);
+          erroresRegistro.push('comentario');
+        }
       }
 
+      // 2. Registrar horas si existen
       if (horasParaBackend > 0) {
-        await api.createRegistroHoras({
-          id_tarea: tarea.id_tarea,
-          horas_trabajadas: horasParaBackend,
-          fecha: new Date().toISOString().split('T')[0],
-          comentario: comentarioTexto.trim() || `Tiempo registrado (+${formatTiempoHumano(minutosAHoras)})`,
-        });
+        try {
+          await api.createRegistroHoras({
+            id_tarea: tarea.id_tarea,
+            horas_trabajadas: horasParaBackend,
+            fecha: new Date().toISOString().split('T')[0],
+            comentario: comentarioLimpio || `Tiempo registrado (+${formatTiempoHumano(minutosAHoras)})`,
+          });
+        } catch (err: any) {
+          console.error('[v0] Error al registrar horas:', err);
+          erroresRegistro.push('horas');
+        }
       }
 
+      // 3. Subir archivo si existe
       if (archivoEvidencia) {
-        await api.uploadArchivo(tarea.id_tarea, archivoEvidencia);
+        try {
+          await api.uploadArchivo(tarea.id_tarea, archivoEvidencia);
+        } catch (err: any) {
+          console.error('[v0] Error al subir archivo:', err);
+          erroresRegistro.push('archivo');
+        }
       }
 
+      // Si hubo errores, mostrarlos
+      if (erroresRegistro.length > 0) {
+        const erroresTexto = erroresRegistro.join(', ');
+        setError(`Error al registrar: ${erroresTexto}. Revisa que todos los datos sean válidos.`);
+        setLoading(false);
+        return;
+      }
+
+      // Limpiar formulario
       setComentarioTexto('');
       setMinutosAHoras(0);
       setArchivoEvidencia(null);
 
-      mutateComentarios();
-      mutateHoras();
-      mutateArchivos();
+      // Revalidar datos
+      await Promise.all([
+        mutateComentarios(),
+        mutateHoras(),
+        mutateArchivos(),
+      ]);
 
       if (onUpdateSuccess) onUpdateSuccess();
     } catch (err: any) {
-      console.error('Error al guardar el avance:', err);
-      setError('Error al registrar el avance y la evidencia.');
+      console.error('[v0] Error general al guardar el avance:', err);
+      setError('Error inesperado al registrar el avance y la evidencia. Intenta de nuevo.');
     } finally {
       setLoading(false);
     }

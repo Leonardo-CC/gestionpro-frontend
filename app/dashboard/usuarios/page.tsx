@@ -107,6 +107,34 @@ export default function UsuariosPage() {
     Ejecutivo: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
   };
 
+  // Filtrar usuarios pendientes de aprobación (sin tarifa horaria o activo = false)
+  const usuariosPendientes = Array.isArray(usuarios) 
+    ? usuarios.filter((u: Usuario) => !u.activo || !u.tarifa_hora)
+    : [];
+  
+  const usuariosActivos = Array.isArray(usuarios)
+    ? usuarios.filter((u: Usuario) => u.activo && u.tarifa_hora)
+    : [];
+
+  const handleAprobarUsuario = async (usuario: Usuario) => {
+    setLoading(true);
+    setError('');
+    try {
+      // Abrir modal para asignar tarifa horaria
+      handleOpenModal(usuario);
+      setFormData({
+        nombre: usuario.nombre,
+        email: usuario.email,
+        rol: usuario.rol,
+        tarifa_hora: usuario.tarifa_hora ? usuario.tarifa_hora.toString() : '50', // Default tarifa
+      });
+    } catch (err) {
+      setError('Error al aprobar el usuario');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="p-6 space-y-6 text-slate-100 max-w-7xl mx-auto">
       {/* Encabezado Principal */}
@@ -127,10 +155,52 @@ export default function UsuariosPage() {
       {error && <Alert type="error" title="Error" onClose={() => setError('')}>{error}</Alert>}
       {success && <Alert type="success" title="Éxito" onClose={() => setSuccess('')}>{success}</Alert>}
 
-      {/* Grilla de Usuarios Corregida */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {Array.isArray(usuarios) && usuarios.length > 0 ? (
-          usuarios.map((usuario: Usuario) => {
+      {/* SECCIÓN: Solicitudes Pendientes de Aprobación */}
+      {usuariosPendientes.length > 0 && (
+        <div className="bg-amber-500/5 border border-amber-500/30 rounded-2xl p-6 space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="w-5 h-5 rounded-full bg-amber-500/20 flex items-center justify-center">
+              <div className="w-2.5 h-2.5 bg-amber-500 rounded-full"></div>
+            </div>
+            <h2 className="text-lg font-bold text-amber-400">Solicitudes Pendientes de Aprobación</h2>
+            <span className="ml-auto px-2.5 py-0.5 bg-amber-500/20 text-amber-400 text-xs font-bold rounded-full border border-amber-500/30">
+              {usuariosPendientes.length}
+            </span>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {usuariosPendientes.map((usuario: Usuario) => (
+              <div
+                key={usuario.id_usuario}
+                className="bg-slate-900/80 border border-amber-500/20 p-4 rounded-xl flex items-center justify-between"
+              >
+                <div>
+                  <p className="font-semibold text-slate-100">{usuario.nombre}</p>
+                  <p className="text-xs text-slate-400">{usuario.email}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleAprobarUsuario(usuario)}
+                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded-lg transition-colors"
+                >
+                  Aprobar
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Grilla de Usuarios Activos */}
+      <div>
+        <h2 className="text-lg font-bold text-slate-100 mb-4 flex items-center gap-2">
+          <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
+          Usuarios Activos
+          <span className="text-xs font-normal text-slate-400 ml-auto">Total: {usuariosActivos.length}</span>
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        {usuariosActivos.length > 0 ? (
+          usuariosActivos.map((usuario: Usuario) => {
             const iniciales = usuario.nombre
               ? usuario.nombre.substring(0, 2).toUpperCase()
               : 'US';
@@ -201,9 +271,10 @@ export default function UsuariosPage() {
           })
         ) : (
           <div className="col-span-full bg-slate-900/40 border border-slate-800 text-center text-slate-500 py-12 rounded-2xl text-xs italic">
-            No hay usuarios registrados en la plataforma.
+            No hay usuarios activos en la plataforma. Los usuarios pendientes aparecen en la sección anterior.
           </div>
         )}
+      </div>
       </div>
 
       {/* Modal Editar / Crear */}

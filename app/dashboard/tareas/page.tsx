@@ -47,8 +47,8 @@ function TareasContent() {
   const [viewportRatio, setViewportRatio] = useState(1);
   const kanbanRef = useRef<KanbanBoardRef>(null);
 
-  // 1. Cargar Proyectos
-  const { data: proyectos = [] } = useSWR('/proyectos', () => api.getProyectos(), {
+  // 1. Cargar Proyectos (Solo accesibles al usuario)
+  const { data: proyectos = [] } = useSWR('/proyectosAccesibles', () => api.getProyectosAccesiblesCompleto(), {
     revalidateOnFocus: false,
   });
 
