@@ -18,6 +18,19 @@ function TareasContent() {
   const [selectedTarea, setSelectedTarea] = useState<Tarea | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
 
+  // 🔒 Datos de Sesión y Rol
+  const [userRole, setUserRole] = useState<string>('');
+  const [userId, setUserId] = useState<string>('');
+  const [userName, setUserName] = useState<string>('');
+
+  useEffect(() => {
+    setUserRole(localStorage.getItem('userRole') || 'Miembro_Equipo');
+    setUserId(localStorage.getItem('userId') || '');
+    setUserName(localStorage.getItem('userName') || 'Usuario Activo');
+  }, []);
+
+  const isManagerOrAdmin = userRole === 'Administrador' || userRole === 'Gerente_Proyecto';
+
   // Modal para Registro de Horas
   const [tareaParaHoras, setTareaParaHoras] = useState<Tarea | null>(null);
   const [isHorasModalOpen, setIsHorasModalOpen] = useState(false);
@@ -114,6 +127,9 @@ function TareasContent() {
     const primerProyecto = Array.isArray(proyectos) && proyectos.length > 0 ? String(proyectos[0].id_proyecto) : '';
     const proySeleccionado = selectedProyectoId !== 'TODOS' ? selectedProyectoId : primerProyecto;
 
+    // 💡 Si es Miembro de Equipo, la tarea se asigna automáticamente a su ID
+    const usuarioAsignadoInicial = isManagerOrAdmin ? '' : userId;
+
     setNewTareaData({
       titulo: '',
       descripcion: '',
@@ -122,7 +138,7 @@ function TareasContent() {
       prioridad: 'Media',
       fecha_vencimiento: '',
       horas_estimadas: '',
-      usuario_asignado: '',
+      usuario_asignado: usuarioAsignadoInicial,
     });
     setErrorMsg('');
     setIsCreateModalOpen(true);
@@ -154,8 +170,10 @@ function TareasContent() {
         horas_estimadas: parseFloat(newTareaData.horas_estimadas) || null,
       };
 
-      if (newTareaData.usuario_asignado) {
-        payload.usuario_asignado = newTareaData.usuario_asignado;
+      // Determinar asignado final
+      const finalUsuarioAsignado = isManagerOrAdmin ? newTareaData.usuario_asignado : userId;
+      if (finalUsuarioAsignado) {
+        payload.usuario_asignado = finalUsuarioAsignado;
       }
 
       await api.createTarea(payload);
@@ -226,7 +244,7 @@ function TareasContent() {
             </div>
           </div>
 
-          {/* Selector de Proyecto con Icono SVG */}
+          {/* Selector de Proyecto */}
           <div className="relative">
             <select
               value={selectedProyectoId}
@@ -350,21 +368,33 @@ function TareasContent() {
               </select>
             </div>
 
+            {/* 🔒 ASIGNACIÓN SEGÚN EL ROL */}
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">Asignar Responsable</label>
-              <select
-                value={newTareaData.usuario_asignado}
-                onChange={(e) => setNewTareaData({ ...newTareaData, usuario_asignado: e.target.value })}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-slate-950 cursor-pointer [color-scheme:dark]"
-              >
-                <option value="" className="bg-slate-900 text-slate-100">Sin Asignar</option>
-                {Array.isArray(usuarios) &&
-                  usuarios.map((u: any) => (
-                    <option key={u.id_usuario} value={String(u.id_usuario)} className="bg-slate-900 text-slate-100">
-                      {u.nombre || u.email}
-                    </option>
-                  ))}
-              </select>
+              {isManagerOrAdmin ? (
+                /* 👑 Gerente / Admin: Selección libre de usuarios */
+                <select
+                  value={newTareaData.usuario_asignado}
+                  onChange={(e) => setNewTareaData({ ...newTareaData, usuario_asignado: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-slate-950 cursor-pointer [color-scheme:dark]"
+                >
+                  <option value="" className="bg-slate-900 text-slate-100">Sin Asignar</option>
+                  {Array.isArray(usuarios) &&
+                    usuarios.map((u: any) => (
+                      <option key={u.id_usuario} value={String(u.id_usuario)} className="bg-slate-900 text-slate-100">
+                        {u.nombre || u.email}
+                      </option>
+                    ))}
+                </select>
+              ) : (
+                /* 💻 Miembro de Equipo: Auto-asignado bloqueado */
+                <input
+                  type="text"
+                  readOnly
+                  value={`👤 ${userName} (Auto-asignado)`}
+                  className="w-full px-3 py-2 bg-slate-950/80 border border-slate-800 rounded-lg text-slate-400 text-sm font-medium cursor-not-allowed"
+                />
+              )}
             </div>
           </div>
 

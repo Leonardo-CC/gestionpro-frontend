@@ -15,28 +15,35 @@ export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   
+  // Estado de montaje para evitar desacoples de SSR / Hydration
+  const [isMounted, setIsMounted] = useState(false);
+
   // Estados para la información del usuario
   const [userName, setUserName] = useState('Cargando...');
   const [userRole, setUserRole] = useState('...');
+  const [userRoleRaw, setUserRoleRaw] = useState('');
   const [userInitial, setUserInitial] = useState('U');
 
   useEffect(() => {
+    setIsMounted(true);
+
     async function loadUserData() {
       try {
         const userData: UserProfile = await api.getPerfil(); 
         
         const nombreReal = userData.nombre || userData.email?.split('@')[0] || 'Usuario';
-        const rolReal = userData.rol || 'Miembro del Equipo';
+        const rolReal = userData.rol || 'Miembro_Equipo';
 
         setUserName(nombreReal);
         setUserRole(rolReal.replace('_', ' '));
+        setUserRoleRaw(rolReal);
         setUserInitial(nombreReal.charAt(0).toUpperCase());
 
         localStorage.setItem('userName', nombreReal);
         localStorage.setItem('userRole', rolReal);
         return;
       } catch (error) {
-        console.log('Usando datos locales guardados...');
+        console.log('Cargando perfil desde caché local...');
       }
 
       const storedName = localStorage.getItem('userName');
@@ -45,57 +52,86 @@ export default function Sidebar() {
       if (storedName) {
         setUserName(storedName);
         setUserRole(storedRole ? storedRole.replace('_', ' ') : 'Usuario');
+        setUserRoleRaw(storedRole || 'Miembro_Equipo');
         setUserInitial(storedName.charAt(0).toUpperCase());
       } else {
-        setUserName('Usuario Activo');
-        setUserRole('Gerente de Proyecto');
-        setUserInitial('U');
+        setUserName('Nuevo Usuario');
+        setUserRole('Miembro Equipo');
+        setUserRoleRaw('Miembro_Equipo');
+        setUserInitial('N');
       }
     }
 
     loadUserData();
+
+    // Escuchar cambios de perfil en vivo
+    const handleProfileUpdate = (event: any) => {
+      const nuevoNombre = event.detail?.nombre || localStorage.getItem('userName');
+      if (nuevoNombre) {
+        setUserName(nuevoNombre);
+        setUserInitial(nuevoNombre.charAt(0).toUpperCase());
+      }
+    };
+
+    window.addEventListener('user-profile-updated', handleProfileUpdate);
+
+    return () => {
+      window.removeEventListener('user-profile-updated', handleProfileUpdate);
+    };
   }, []);
 
   const handleLogout = () => {
     localStorage.removeItem('authToken');
+    localStorage.removeItem('userId');
     localStorage.removeItem('userName');
     localStorage.removeItem('userRole');
     router.push('/login');
   };
 
-  // Menú de navegación completo
-  const navItems = [
+  // Definición completa de rutas con sus roles autorizados
+  const allNavItems = [
     { 
       name: 'Dashboard', 
       path: '/dashboard', 
-      icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' 
+      icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6',
+      roles: ['Administrador', 'Gerente_Proyecto', 'Miembro_Equipo', 'Ejecutivo']
     },
     { 
       name: 'Cronograma', 
       path: '/dashboard/cronograma', 
-      icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' 
+      icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z',
+      roles: ['Administrador', 'Gerente_Proyecto', 'Miembro_Equipo', 'Ejecutivo']
     },
     { 
       name: 'Proyectos', 
       path: '/dashboard/proyectos', 
-      icon: 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10' 
+      icon: 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10',
+      roles: ['Administrador', 'Gerente_Proyecto', 'Miembro_Equipo', 'Ejecutivo']
     },
     { 
       name: 'Tareas', 
       path: '/dashboard/tareas', 
-      icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01' 
+      icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01',
+      roles: ['Administrador', 'Gerente_Proyecto', 'Miembro_Equipo', 'Ejecutivo']
     },
     { 
       name: 'Reportes', 
       path: '/dashboard/reportes', 
-      icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' 
+      icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z',
+      roles: ['Administrador', 'Gerente_Proyecto', 'Ejecutivo'] // 🔒 Oculto para Miembro_Equipo
     },
     { 
       name: 'Usuarios', 
       path: '/dashboard/usuarios', 
-      icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z' 
+      icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z',
+      roles: ['Administrador'] // 🔒 Exclusivo de Administrador
     },
   ];
+
+  // ⚡ FILTRADO ESTRICTO DE RUTAS SEGÚN EL ROL AUTÉNTICO
+  const navItems = isMounted && userRoleRaw
+    ? allNavItems.filter((item) => item.roles.includes(userRoleRaw))
+    : allNavItems.filter((item) => item.roles.includes('Miembro_Equipo')); // Fallback seguro por defecto
 
   return (
     <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col h-full border-r border-slate-800 shadow-xl shrink-0">
@@ -107,7 +143,7 @@ export default function Sidebar() {
         <span className="font-bold text-white tracking-tight">GestionPro</span>
       </div>
 
-      {/* Menú de navegación */}
+      {/* Menú de navegación condicional */}
       <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
         {navItems.map((item) => {
           const isActive = item.path === '/dashboard' 
@@ -133,10 +169,8 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* Perfil del Usuario y Cierre de Sesión */}
+      {/* Perfil del Usuario al pie */}
       <div className="mt-auto border-t border-slate-800 bg-slate-950/40 p-4 shrink-0">
-        
-        {/* Link Interactivo al Perfil */}
         <Link 
           href="/dashboard/perfil"
           className={`flex items-center gap-3 mb-3 p-2 rounded-xl transition-all group cursor-pointer border ${
@@ -159,7 +193,6 @@ export default function Sidebar() {
           </div>
         </Link>
 
-        {/* Botón Cerrar Sesión */}
         <button 
           onClick={handleLogout}
           className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-slate-800/80 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/30 text-slate-400 border border-slate-700 rounded-lg transition-all text-xs font-semibold group cursor-pointer"

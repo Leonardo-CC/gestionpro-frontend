@@ -22,6 +22,33 @@ from api.serializers import (
 from api.permissions import RoleBasedPermission
 
 
+# Helper para resolver el usuario autenticado real
+def get_current_usuario(request):
+    """
+    Intenta recuperar el objeto Usuarios mapeado al usuario autenticado.
+    Búsqueda ordenada: por id_usuario (UUID) -> por email -> fallback a Leonardo / primero.
+    """
+    if not request or not hasattr(request, 'user') or not request.user.is_authenticated:
+        return Usuarios.objects.filter(nombre__icontains='Leonardo').first() or Usuarios.objects.first()
+
+    # Búsqueda 1: Por ID de usuario (UUID)
+    user_id = getattr(request.user, 'id_usuario', None) or getattr(request.user, 'id', None)
+    if user_id:
+        usuario = Usuarios.objects.filter(id_usuario=user_id).first()
+        if usuario:
+            return usuario
+
+    # Búsqueda 2: Por Email
+    user_email = getattr(request.user, 'email', None)
+    if user_email:
+        usuario = Usuarios.objects.filter(email=user_email).first()
+        if usuario:
+            return usuario
+
+    # Búsqueda 3: Fallback seguro
+    return Usuarios.objects.filter(nombre__icontains='Leonardo').first() or Usuarios.objects.first()
+
+
 class UsuariosViewSet(viewsets.ModelViewSet):
     queryset = Usuarios.objects.all()
     serializer_class = UsuariosSerializer
@@ -35,10 +62,10 @@ class ProyectosViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         try:
-            gerente_seguro = Usuarios.objects.first()
-            serializer.save(id_gerente=gerente_seguro)
+            gerente_activo = get_current_usuario(self.request)
+            serializer.save(id_gerente=gerente_activo)
         except Exception as e:
-            print("Error en Modo Demo salvando proyecto:", str(e))
+            print("Error registrando proyecto:", str(e))
             serializer.save()
 
     def perform_update(self, serializer):
@@ -51,16 +78,7 @@ class ProyectosViewSet(viewsets.ModelViewSet):
         if presupuesto_anterior is not None and nuevo_presupuesto is not None:
             if Decimal(str(presupuesto_anterior)) != Decimal(str(nuevo_presupuesto)):
                 try:
-                    usuario_activo = None
-                    
-                    if hasattr(self.request, 'user') and hasattr(self.request.user, 'email'):
-                        usuario_activo = Usuarios.objects.filter(email=self.request.user.email).first()
-
-                    if not usuario_activo:
-                        usuario_activo = Usuarios.objects.filter(nombre__icontains='Leonardo').first()
-
-                    if not usuario_activo:
-                        usuario_activo = Usuarios.objects.first()
+                    usuario_activo = get_current_usuario(self.request)
 
                     HistorialPresupuesto.objects.create(
                         proyecto=proyecto_actualizado,
@@ -72,6 +90,7 @@ class ProyectosViewSet(viewsets.ModelViewSet):
                 except Exception as e:
                     print(f"Error registrando historial de presupuesto: {e}")
 
+
 class TareasViewSet(viewsets.ModelViewSet):
     serializer_class = TareasSerializer
     permission_classes = [RoleBasedPermission]
@@ -82,6 +101,7 @@ class TareasViewSet(viewsets.ModelViewSet):
         if proyecto_id is not None:
             queryset = queryset.filter(id_proyecto=proyecto_id)
         return queryset
+
 
 class AsignacionesViewSet(viewsets.ModelViewSet):
     queryset = Asignaciones.objects.all()
@@ -102,12 +122,7 @@ class ComentariosTareaViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         try:
-            usuario_activo = None
-            if hasattr(self.request, 'user') and hasattr(self.request.user, 'email'):
-                usuario_activo = Usuarios.objects.filter(email=self.request.user.email).first()
-            if not usuario_activo:
-                usuario_activo = Usuarios.objects.filter(nombre__icontains='Leonardo').first() or Usuarios.objects.first()
-
+            usuario_activo = get_current_usuario(self.request)
             serializer.save(id_usuario=usuario_activo)
         except Exception as e:
             print(f"Error asignando usuario en comentario: {e}")
@@ -127,12 +142,7 @@ class ArchivosTareaViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         try:
-            usuario_activo = None
-            if hasattr(self.request, 'user') and hasattr(self.request.user, 'email'):
-                usuario_activo = Usuarios.objects.filter(email=self.request.user.email).first()
-            if not usuario_activo:
-                usuario_activo = Usuarios.objects.filter(nombre__icontains='Leonardo').first() or Usuarios.objects.first()
-
+            usuario_activo = get_current_usuario(self.request)
             serializer.save(id_usuario=usuario_activo)
         except Exception as e:
             print(f"Error asignando usuario en archivo: {e}")
@@ -152,12 +162,7 @@ class RegistroHorasViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         try:
-            usuario_activo = None
-            if hasattr(self.request, 'user') and hasattr(self.request.user, 'email'):
-                usuario_activo = Usuarios.objects.filter(email=self.request.user.email).first()
-            if not usuario_activo:
-                usuario_activo = Usuarios.objects.filter(nombre__icontains='Leonardo').first() or Usuarios.objects.first()
-
+            usuario_activo = get_current_usuario(self.request)
             serializer.save(id_usuario=usuario_activo)
         except Exception as e:
             print(f"Error asignando usuario en registro de horas: {e}")

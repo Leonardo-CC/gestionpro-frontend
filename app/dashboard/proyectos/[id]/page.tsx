@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import useSWR from 'swr';
 import { useParams, useRouter } from 'next/navigation';
 import api from '../../../../services/api';
@@ -24,7 +24,17 @@ export default function ProjectDetailPage() {
   const router = useRouter();
   const projectId = parseInt(params.id as string);
 
-  // 1. Cargar datos del proyecto (Usando getProyecto)
+  // 🔒 Estado y control de Roles
+  const [userRole, setUserRole] = useState<string>('');
+
+  useEffect(() => {
+    const role = localStorage.getItem('userRole') || 'Miembro_Equipo';
+    setUserRole(role);
+  }, []);
+
+  const isManagerOrAdmin = userRole === 'Administrador' || userRole === 'Gerente_Proyecto';
+
+  // 1. Cargar datos del proyecto
   const { data: proyecto, mutate: mutateProyecto } = useSWR(
     projectId ? `/proyectos/${projectId}` : null,
     () => api.getProyecto(projectId),
@@ -32,30 +42,27 @@ export default function ProjectDetailPage() {
   );
 
   // 2. Cargar tareas (Asegurando fallback a Array vacío)
-  const { data: tareasData, mutate: mutateTareas } = useSWR(
+  const { data: tareasData } = useSWR(
     projectId ? `/tareas/?proyecto=${projectId}` : null,
     () => api.getTareas(projectId),
     { revalidateOnFocus: false }
   );
-
-  // Garantizar que tareas siempre sea un Array
   const tareas: Tarea[] = Array.isArray(tareasData) ? tareasData : [];
 
-  // 3. Cargar usuarios (Asegurando fallback a Array vacío)
+  // 3. Cargar usuarios
   const { data: usuariosData } = useSWR('/usuarios', () => api.getUsuarios(), {
     revalidateOnFocus: false,
   });
   const usuarios = Array.isArray(usuariosData) ? usuariosData : [];
 
-  // 4. Cargar Historial de Presupuesto (Filtrado por este proyecto)
+  // 4. Cargar Historial de Presupuesto (🔒 Solo se solicita si es Admin o Gerente)
   const { data: historialData, mutate: mutateHistorial } = useSWR(
-    projectId ? `/historial-presupuesto/?proyecto=${projectId}` : null,
+    projectId && isManagerOrAdmin ? `/historial-presupuesto/?proyecto=${projectId}` : null,
     () => api.getHistorialPresupuesto(projectId),
     { revalidateOnFocus: false }
   );
   const historial = Array.isArray(historialData) ? historialData : [];
 
-  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isEditProjectOpen, setIsEditProjectOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -69,6 +76,7 @@ export default function ProjectDetailPage() {
   });
 
   const handleOpenEditModal = () => {
+    if (!isManagerOrAdmin) return;
     if (proyecto) {
       setEditForm({
         nombre: proyecto.nombre || '',
@@ -82,6 +90,8 @@ export default function ProjectDetailPage() {
 
   const handleUpdateProjectSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isManagerOrAdmin) return;
+
     const monto = parseFloat(editForm.presupuesto_total);
     if (isNaN(monto) || monto <= 0) {
       setError('El presupuesto debe ser un monto mayor a 0 Bs.');
@@ -141,12 +151,16 @@ export default function ProjectDetailPage() {
           <Badge variant={proyecto.estado === 'Activo' ? 'success' : proyecto.estado === 'Pausado' ? 'warning' : 'danger'}>
             {proyecto.estado}
           </Badge>
-          <button
-            onClick={handleOpenEditModal}
-            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold text-xs rounded-lg transition-all"
-          >
-            Editar
-          </button>
+
+          {/* 🔒 BOTÓN EDITAR SOLO VISIBLE PARA ADMIN O GERENTE */}
+          {isManagerOrAdmin && (
+            <button
+              onClick={handleOpenEditModal}
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold text-xs rounded-lg transition-all"
+            >
+              Editar
+            </button>
+          )}
         </div>
       </div>
 
@@ -156,10 +170,16 @@ export default function ProjectDetailPage() {
 
       {/* Métricas e Indicadores */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        
+        {/* 🔒 ADAPTACIÓN SEGÚN EL ROL DEL USUARIO */}
         <div className="bg-slate-900/60 p-5 rounded-2xl border border-slate-800 shadow-lg">
-          <span className="text-slate-400 text-[11px] font-bold uppercase tracking-wider block">Presupuesto Actual</span>
+          <span className="text-slate-400 text-[11px] font-bold uppercase tracking-wider block">
+            {isManagerOrAdmin ? 'Presupuesto Actual' : 'Total de Tareas'}
+          </span>
           <p className="text-2xl font-black text-blue-400 mt-1">
-            Bs. {Number(proyecto.presupuesto_total || 0).toFixed(2)}
+            {isManagerOrAdmin
+              ? `Bs. ${Number(proyecto.presupuesto_total || 0).toFixed(2)}`
+              : `${totalTareas} asignadas`}
           </p>
         </div>
 
@@ -267,121 +287,125 @@ export default function ProjectDetailPage() {
         </div>
       </div>
 
-      {/* Historial de Cambios Financieros */}
-      <div className="bg-slate-900/60 p-5 rounded-2xl border border-slate-800 shadow-xl space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-          <h3 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
-            <span></span> Historial de Modificaciones Financieras
-          </h3>
-        </div>
+      {/* 🔒 HISTORIAL DE CAMBIOS FINANCIEROS (OCULTO PARA MIEMBROS DE EQUIPO) */}
+      {isManagerOrAdmin && (
+        <div className="bg-slate-900/60 p-5 rounded-2xl border border-slate-800 shadow-xl space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <h3 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
+              <span>Historial de Modificaciones Financieras</span>
+            </h3>
+          </div>
 
-        <div className="space-y-2.5 max-h-[250px] overflow-y-auto pr-1">
-          {historial.length > 0 ? (
-            historial.map((h: any) => {
-              const incremento = Number(h.monto_nuevo) > Number(h.monto_anterior);
-              const diferencia = Math.abs(Number(h.monto_nuevo) - Number(h.monto_anterior));
+          <div className="space-y-2.5 max-h-[250px] overflow-y-auto pr-1">
+            {historial.length > 0 ? (
+              historial.map((h: any) => {
+                const incremento = Number(h.monto_nuevo) > Number(h.monto_anterior);
+                const diferencia = Math.abs(Number(h.monto_nuevo) - Number(h.monto_anterior));
 
-              return (
-                <div
-                  key={h.id}
-                  className="p-3 bg-slate-950/80 rounded-xl border border-slate-800/80 flex items-center justify-between gap-4 text-xs"
-                >
-                  <div>
-                    <p className="font-bold text-slate-200">
-                      Ajuste de Presupuesto: <span className="text-slate-400 font-mono">Bs. {Number(h.monto_anterior).toFixed(2)}</span> → <span className="text-blue-400 font-mono font-black">Bs. {Number(h.monto_nuevo).toFixed(2)}</span>
-                    </p>
-                    <span className="text-[10px] text-slate-500">
-                      Modificado por: <strong className="text-slate-400">{h.usuario_nombre || 'Gerente'}</strong> el {new Date(h.fecha).toLocaleDateString()} a las {new Date(h.fecha).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                return (
+                  <div
+                    key={h.id}
+                    className="p-3 bg-slate-950/80 rounded-xl border border-slate-800/80 flex items-center justify-between gap-4 text-xs"
+                  >
+                    <div>
+                      <p className="font-bold text-slate-200">
+                        Ajuste de Presupuesto: <span className="text-slate-400 font-mono">Bs. {Number(h.monto_anterior).toFixed(2)}</span> → <span className="text-blue-400 font-mono font-black">Bs. {Number(h.monto_nuevo).toFixed(2)}</span>
+                      </p>
+                      <span className="text-[10px] text-slate-500">
+                        Modificado por: <strong className="text-slate-400">{h.usuario_nombre || 'Gerente'}</strong> el {new Date(h.fecha).toLocaleDateString()} a las {new Date(h.fecha).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+
+                    <span
+                      className={`font-mono font-bold px-2.5 py-1 rounded-lg text-[10px] ${
+                        incremento
+                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                          : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                      }`}
+                    >
+                      {incremento ? '+' : '-'} Bs. {diferencia.toFixed(2)}
                     </span>
                   </div>
-
-                  <span
-                    className={`font-mono font-bold px-2.5 py-1 rounded-lg text-[10px] ${
-                      incremento
-                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                        : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                    }`}
-                  >
-                    {incremento ? '+' : '-'} Bs. {diferencia.toFixed(2)}
-                  </span>
-                </div>
-              );
-            })
-          ) : (
-            <div className="text-center py-6 text-xs text-slate-500 italic">
-              No se han registrado modificaciones en el presupuesto de este proyecto.
-            </div>
-          )}
+                );
+              })
+            ) : (
+              <div className="text-center py-6 text-xs text-slate-500 italic">
+                No se han registrado modificaciones en el presupuesto de este proyecto.
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* MODAL EDITAR PROYECTO & PRESUPUESTO */}
-      <Modal
-        isOpen={isEditProjectOpen}
-        onClose={() => setIsEditProjectOpen(false)}
-        title="Editar Proyecto & Presupuesto"
-        size="md"
-      >
-        <form onSubmit={handleUpdateProjectSubmit} className="space-y-4 text-slate-200">
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">Nombre del Proyecto</label>
-            <input
-              type="text"
-              value={editForm.nombre}
-              onChange={(e) => setEditForm({ ...editForm, nombre: e.target.value })}
-              className="w-full px-3 py-2 bg-slate-950 border border-slate-700/80 rounded-lg text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            />
-          </div>
+      {/* 🔒 MODAL EDITAR PROYECTO & PRESUPUESTO (SOLO RENDERIZABLE PARA GERENTE / ADMIN) */}
+      {isManagerOrAdmin && (
+        <Modal
+          isOpen={isEditProjectOpen}
+          onClose={() => setIsEditProjectOpen(false)}
+          title="Editar Proyecto & Presupuesto"
+          size="md"
+        >
+          <form onSubmit={handleUpdateProjectSubmit} className="space-y-4 text-slate-200">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">Nombre del Proyecto</label>
+              <input
+                type="text"
+                value={editForm.nombre}
+                onChange={(e) => setEditForm({ ...editForm, nombre: e.target.value })}
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-700/80 rounded-lg text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">Presupuesto Total (Bs.)</label>
-            <input
-              type="text"
-              inputMode="decimal"
-              value={editForm.presupuesto_total}
-              onChange={(e) => {
-                const val = e.target.value.replace(/[^0-9.]/g, '');
-                if ((val.match(/\./g) || []).length <= 1) {
-                  setEditForm({ ...editForm, presupuesto_total: val });
-                }
-              }}
-              className="w-full px-3 py-2 bg-slate-950 border border-slate-700/80 rounded-lg text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            />
-          </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">Presupuesto Total (Bs.)</label>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={editForm.presupuesto_total}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/[^0-9.]/g, '');
+                  if ((val.match(/\./g) || []).length <= 1) {
+                    setEditForm({ ...editForm, presupuesto_total: val });
+                  }
+                }}
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-700/80 rounded-lg text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                required
+              />
+            </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">Estado</label>
-            <select
-              value={editForm.estado}
-              onChange={(e) => setEditForm({ ...editForm, estado: e.target.value })}
-              className="w-full px-3 py-2 bg-slate-950 border border-slate-700/80 rounded-lg text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer [color-scheme:dark]"
-            >
-              <option value="Activo" className="bg-slate-900 text-slate-100">Activo</option>
-              <option value="Pausado" className="bg-slate-900 text-slate-100">Pausado</option>
-              <option value="Completado" className="bg-slate-900 text-slate-100">Completado</option>
-            </select>
-          </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">Estado</label>
+              <select
+                value={editForm.estado}
+                onChange={(e) => setEditForm({ ...editForm, estado: e.target.value })}
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-700/80 rounded-lg text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer [color-scheme:dark]"
+              >
+                <option value="Activo" className="bg-slate-900 text-slate-100">Activo</option>
+                <option value="Pausado" className="bg-slate-900 text-slate-100">Pausado</option>
+                <option value="Completado" className="bg-slate-900 text-slate-100">Completado</option>
+              </select>
+            </div>
 
-          <div className="flex justify-end gap-2 pt-4 border-t border-slate-800">
-            <button
-              type="button"
-              onClick={() => setIsEditProjectOpen(false)}
-              className="px-4 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800 rounded-lg transition-colors"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-4 py-2 text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors disabled:opacity-50"
-            >
-              {loading ? 'Guardando...' : 'Guardar Cambios'}
-            </button>
-          </div>
-        </form>
-      </Modal>
+            <div className="flex justify-end gap-2 pt-4 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setIsEditProjectOpen(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800 rounded-lg transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="px-4 py-2 text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors disabled:opacity-50"
+              >
+                {loading ? 'Guardando...' : 'Guardar Cambios'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </div>
   );
 }
