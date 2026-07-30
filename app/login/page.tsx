@@ -46,16 +46,7 @@ export default function LoginPage() {
           localStorage.setItem('userRole', userObj.rol);
         }
 
-        // Verificar si el usuario está activo
-        const isActive = userObj.activo !== false && userObj.tarifa_hora;
-        localStorage.setItem('userActive', isActive ? 'true' : 'false');
-
-        // Si no está activo, redirigir a pending-approval
-        if (!isActive) {
-          router.push('/pending-approval');
-        } else {
-          router.push('/dashboard');
-        }
+        router.push('/dashboard');
       } else {
         setError('No se recibió el token de autenticación del servidor');
       }

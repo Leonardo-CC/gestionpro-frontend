@@ -155,6 +155,29 @@ export default function UsuariosPage() {
       {error && <Alert type="error" title="Error" onClose={() => setError('')}>{error}</Alert>}
       {success && <Alert type="success" title="Éxito" onClose={() => setSuccess('')}>{success}</Alert>}
 
+      {/* SECCIÓN: Panel de Postulaciones Pendientes (Para presentación) */}
+      <div className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 rounded-2xl p-6 space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center border border-amber-500/30">
+            <svg className="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+            </svg>
+          </div>
+          <div className="flex-1">
+            <h2 className="text-lg font-bold text-amber-400">Postulaciones Pendientes</h2>
+            <p className="text-xs text-slate-400">Usuarios solicitando acceso a la organización</p>
+          </div>
+          <span className="px-3 py-1.5 bg-amber-500/20 text-amber-400 text-xs font-bold rounded-full border border-amber-500/30">
+            0 solicitudes
+          </span>
+        </div>
+        
+        <div className="bg-slate-900/40 border border-amber-500/20 rounded-xl p-4 text-center">
+          <p className="text-slate-400 text-sm">No hay postulaciones pendientes en este momento</p>
+          <p className="text-slate-500 text-xs mt-2">Los nuevos usuarios aparecerán aquí cuando envíen sus solicitudes</p>
+        </div>
+      </div>
+
       {/* SECCIÓN: Solicitudes Pendientes de Aprobación */}
       {usuariosPendientes.length > 0 && (
         <div className="bg-amber-500/5 border border-amber-500/30 rounded-2xl p-6 space-y-4">
