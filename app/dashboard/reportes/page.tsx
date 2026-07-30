@@ -102,7 +102,12 @@ export default function ReportesPage() {
     : 0;
 
   const proyectosCompletadosCount = Array.isArray(proyectos)
-    ? proyectos.filter((p: Proyecto) => p.estado === 'Completado' || p.estado === 'FINALIZADO').length
+    ? proyectos.filter((p: Proyecto) => {
+        // Contar como completado si: está Archivado O tiene 100% de progreso
+        if (p.estado === 'Archivado') return true;
+        const progreso = obtenerProgresoReal(p.id_proyecto);
+        return progreso === 100;
+      }).length
     : 0;
 
   const tasaCompletitudGlobal = Array.isArray(proyectos) && proyectos.length > 0
