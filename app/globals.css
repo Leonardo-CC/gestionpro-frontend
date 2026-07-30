@@ -72,3 +72,37 @@ select option {
   background-color: #0f172a !important; /* slate-900 */
   color: #f8fafc !important;
 }
+/* Ocultar spinners/flechas en inputs de tipo number */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield; /* Para Firefox */
+}
+@media print {
+  /* 💡 FORZA A MOSTRAR COLORES DE FONDO, BARRAS DE PROGRESO Y COLORES DE RECHARTS */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  /* Ocultar encabezados nativos del navegador (URL, fecha, localhost, etc.) */
+  @page {
+    margin: 1cm;
+    size: letter portrait;
+  }
+
+  /* Ocultar elementos de navegación y botones */
+  .no-print,
+  button,
+  select,
+  nav,
+  aside,
+  header {
+    display: none !important;
+  }
+}

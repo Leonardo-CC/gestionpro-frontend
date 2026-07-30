@@ -3,10 +3,17 @@
 import React, { useState } from 'react';
 import useSWR from 'swr';
 import api from '../../../services/api';
-import { Card, CardHeader, CardBody } from '../../../components/Card';
 import { Button } from '../../../components/Button';
-import { Select } from '../../../components/Select';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from 'recharts';
 
 interface Proyecto {
   id_proyecto: number;
@@ -15,253 +22,332 @@ interface Proyecto {
   estado: string;
 }
 
+interface Tarea {
+  id_tarea: number;
+  id_proyecto: number;
+  estado: string;
+}
+
 export default function ReportesPage() {
-  const { data: proyectos = [] } = useSWR('/proyectos', () => api.getProyectos(), {
-    revalidateOnFocus: false,
-  });
+  const { data: proyectos = [], isLoading: loadingProyectos } = useSWR(
+    '/proyectos',
+    () => api.getProyectos(),
+    { revalidateOnFocus: false }
+  );
+
+  const { data: tareas = [], isLoading: loadingTareas } = useSWR(
+    '/tareas',
+    () => api.getTareas(),
+    { revalidateOnFocus: false }
+  );
 
   const [exportFormat, setExportFormat] = useState('csv');
 
+  // Función para calcular el progreso real basado en las tareas
+  const obtenerProgresoReal = (idProyecto: number) => {
+    if (!Array.isArray(tareas) || tareas.length === 0) return 0;
+    const tareasProyecto = tareas.filter(
+      (t: Tarea) => Number(t.id_proyecto) === Number(idProyecto)
+    );
+    if (tareasProyecto.length === 0) return 0;
+
+    const completadas = tareasProyecto.filter(
+      (t: Tarea) => t.estado === 'FINALIZADO' || t.estado === 'COMPLETADA'
+    ).length;
+
+    return Math.round((completadas / tareasProyecto.length) * 100);
+  };
+
+  // Función para manejar la exportación de reportes
   const handleExport = () => {
     if (exportFormat === 'csv') {
-      const headers = ['ID', 'Nombre del Proyecto', 'Presupuesto (Bs)', 'Estado'];
+      const headers = ['ID Proyecto', 'Nombre del Proyecto', 'Presupuesto (Bs)', 'Estado', 'Progreso (%)'];
       const rows = proyectos.map((p: Proyecto) => [
         p.id_proyecto,
-        `"${p.nombre}"`, 
-        Number(p.presupuesto_total).toFixed(2),
-        p.estado
+        `"${p.nombre.replace(/"/g, '""')}"`,
+        Number(p.presupuesto_total || 0).toFixed(2),
+        p.estado,
+        `${obtenerProgresoReal(p.id_proyecto)}%`,
       ]);
 
-      const csvContent = [
-        headers.join(','),
-        ...rows.map((row: any) => row.join(','))
-      ].join('\n');
+      const csvContent =
+        '\uFEFF' +
+        [headers.join(','), ...rows.map((row: any) => row.join(','))].join('\n');
 
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
       const url = URL.createObjectURL(blob);
-      
+
       link.setAttribute('href', url);
-      link.setAttribute('download', 'reporte_proyectos.csv');
+      link.setAttribute('download', `reporte_ejecutivo_proyectos_${new Date().toISOString().split('T')[0]}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+    } else if (exportFormat === 'pdf') {
+      window.print();
     } else {
-      alert(`(Modo Demo) La generación de ${exportFormat.toUpperCase()} requiere conexión con el servidor de reportes.`);
+      alert(`Exportando datos en formato ${exportFormat.toUpperCase()}...`);
     }
   };
 
-  const chartDataReales = Array.isArray(proyectos) 
+  const chartDataReales = Array.isArray(proyectos)
     ? proyectos.slice(0, 8).map((p: Proyecto) => ({
-        name: p.nombre.length > 15 ? p.nombre.substring(0, 15) + '...' : p.nombre,
-        Presupuesto: Number(p.presupuesto_total)
+        name: p.nombre.length > 12 ? p.nombre.substring(0, 12) + '...' : p.nombre,
+        Presupuesto: Number(p.presupuesto_total || 0),
       }))
     : [];
 
+  const totalPresupuesto = Array.isArray(proyectos)
+    ? proyectos.reduce((sum: number, p: Proyecto) => sum + Number(p.presupuesto_total || 0), 0)
+    : 0;
+
+  const proyectosCompletadosCount = Array.isArray(proyectos)
+    ? proyectos.filter((p: Proyecto) => p.estado === 'Completado' || p.estado === 'FINALIZADO').length
+    : 0;
+
+  const tasaCompletitudGlobal = Array.isArray(proyectos) && proyectos.length > 0
+    ? Math.round((proyectosCompletadosCount / proyectos.length) * 100)
+    : 0;
+
+  const estadoBadgeStyles: Record<string, string> = {
+    Activo: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+    Completado: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+    Pausado: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+    Archivado: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
+  };
+
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 text-slate-200">
       {/* Encabezado */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-lg shadow-sm border border-gray-100">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900/60 p-6 rounded-2xl border border-slate-800 shadow-xl backdrop-blur-sm">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-            Panel de Reportes
+          <h1 className="text-2xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
+            <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            <span>Panel de Reportes & Analítica</span>
           </h1>
-          <p className="text-gray-500 mt-1 text-sm">
-            Análisis financiero y métricas de rendimiento del equipo
+          <p className="text-slate-400 mt-1 text-xs">
+            Métricas financieras, rendimiento operativo y seguimiento de hitos
           </p>
         </div>
-        <div className="flex items-center gap-3 bg-gray-50 p-2 rounded-lg border border-gray-200">
-          <Select
-            options={[
-              { value: 'csv', label: '📄 CSV (Excel)' },
-              { value: 'pdf', label: '📑 PDF' },
-              { value: 'xlsx', label: '📊 Excel' },
-            ]}
-            placeholder="Formato"
-            value={exportFormat}
-            onChange={(e) => setExportFormat(e.target.value)}
-          />
-          <Button onClick={handleExport} className="shadow-sm">
-            Exportar Datos
+
+        <div className="flex items-center gap-3 bg-slate-950 p-2 rounded-xl border border-slate-800">
+          <div className="relative">
+            <select
+              value={exportFormat}
+              onChange={(e) => setExportFormat(e.target.value)}
+              className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg pl-3 pr-8 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer appearance-none [color-scheme:dark]"
+            >
+              <option value="csv" className="bg-slate-900 text-slate-100">CSV (Excel)</option>
+              <option value="pdf" className="bg-slate-900 text-slate-100">Imprimir / PDF</option>
+            </select>
+            <div className="absolute inset-y-0 right-0 flex items-center pr-2.5 pointer-events-none text-slate-400">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </div>
+
+          <Button
+            onClick={handleExport}
+            size="sm"
+            className="bg-blue-600 hover:bg-blue-500 text-white text-xs px-4 py-2 rounded-lg shadow-md font-semibold transition-all flex items-center gap-1.5"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            <span>Exportar Reporte</span>
           </Button>
         </div>
       </div>
 
-      {/* Resumen General */}
+      {/* Métricas Principales */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="border-l-4 border-l-blue-500 shadow-sm hover:shadow-md transition-shadow">
-          <CardBody>
-            <div className="flex justify-between items-start">
-              <div>
-                <h3 className="text-gray-500 text-xs font-bold uppercase tracking-wider">Total Presupuestado</h3>
-                <p className="text-2xl font-bold text-gray-900 mt-1">
-                  Bs. {proyectos.reduce((sum: number, p: Proyecto) => sum + Number(p.presupuesto_total || 0), 0).toFixed(2)}
-                </p>
-              </div>
-            </div>
-          </CardBody>
-        </Card>
-        
-        <Card className="border-l-4 border-l-green-500 shadow-sm hover:shadow-md transition-shadow">
-          <CardBody>
-            <div className="flex justify-between items-start">
-              <div>
-                <h3 className="text-gray-500 text-xs font-bold uppercase tracking-wider">Proyectos Activos</h3>
-                <p className="text-2xl font-bold text-gray-900 mt-1">
-                  {proyectos.filter((p: Proyecto) => p.estado === 'Activo').length}
-                </p>
-              </div>
-            </div>
-          </CardBody>
-        </Card>
+        <div className="bg-slate-900/60 p-5 rounded-2xl border border-slate-800 shadow-xl backdrop-blur-sm border-l-4 border-l-blue-500">
+          <span className="text-slate-400 text-[11px] font-bold uppercase tracking-wider block">
+            Total Presupuestado
+          </span>
+          <p className="text-2xl font-black text-blue-400 mt-1 font-mono">
+            Bs. {totalPresupuesto.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </p>
+        </div>
 
-        <Card className="border-l-4 border-l-purple-500 shadow-sm hover:shadow-md transition-shadow">
-          <CardBody>
-            <div className="flex justify-between items-start">
-              <div>
-                <h3 className="text-gray-500 text-xs font-bold uppercase tracking-wider">Completados</h3>
-                <p className="text-2xl font-bold text-gray-900 mt-1">
-                  {proyectos.filter((p: Proyecto) => p.estado === 'Completado').length}
-                </p>
-              </div>
-            </div>
-          </CardBody>
-        </Card>
+        <div className="bg-slate-900/60 p-5 rounded-2xl border border-slate-800 shadow-xl backdrop-blur-sm border-l-4 border-l-emerald-500">
+          <span className="text-slate-400 text-[11px] font-bold uppercase tracking-wider block">
+            Proyectos Activos
+          </span>
+          <p className="text-2xl font-black text-emerald-400 mt-1">
+            {proyectos.filter((p: Proyecto) => p.estado === 'Activo').length}
+          </p>
+        </div>
 
-        <Card className="border-l-4 border-l-yellow-500 shadow-sm hover:shadow-md transition-shadow">
-          <CardBody>
-            <div className="flex justify-between items-start">
-              <div>
-                <h3 className="text-gray-500 text-xs font-bold uppercase tracking-wider">Tasa Completitud</h3>
-                <p className="text-2xl font-bold text-gray-900 mt-1">
-                  {proyectos.length > 0
-                    ? Math.round((proyectos.filter((p: Proyecto) => p.estado === 'Completado').length / proyectos.length) * 100)
-                    : 0}
-                  <span className="text-lg text-gray-500 ml-1">%</span>
-                </p>
-              </div>
-            </div>
-          </CardBody>
-        </Card>
+        <div className="bg-slate-900/60 p-5 rounded-2xl border border-slate-800 shadow-xl backdrop-blur-sm border-l-4 border-l-indigo-500">
+          <span className="text-slate-400 text-[11px] font-bold uppercase tracking-wider block">
+            Concluidos
+          </span>
+          <p className="text-2xl font-black text-indigo-400 mt-1">
+            {proyectosCompletadosCount}
+          </p>
+        </div>
+
+        <div className="bg-slate-900/60 p-5 rounded-2xl border border-slate-800 shadow-xl backdrop-blur-sm border-l-4 border-l-amber-500">
+          <span className="text-slate-400 text-[11px] font-bold uppercase tracking-wider block">
+            Tasa de Completitud
+          </span>
+          <p className="text-2xl font-black text-amber-400 mt-1 font-mono">
+            {tasaCompletitudGlobal}%
+          </p>
+        </div>
       </div>
 
-      {/* Gráficos */}
+      {/* Gráficos Recharts & Ranking */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="shadow-sm border border-gray-100">
-          <CardHeader title="Presupuesto por Proyecto (Datos Reales)" />
-          <CardBody>
-            {chartDataReales.length > 0 ? (
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={chartDataReales} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-                  <XAxis dataKey="name" tick={{fill: '#6b7280', fontSize: 12}} axisLine={false} tickLine={false} />
-                  <YAxis tick={{fill: '#6b7280', fontSize: 12}} axisLine={false} tickLine={false} />
-                  <Tooltip 
-                    formatter={(value) => `Bs. ${Number(value).toLocaleString('es-BO')}`}
-                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
-                  />
-                  <Legend iconType="circle" wrapperStyle={{ fontSize: '12px' }} />
-                  <Bar dataKey="Presupuesto" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-[280px] flex items-center justify-center text-gray-400">
-                Aún no hay proyectos registrados
-              </div>
-            )}
-          </CardBody>
-        </Card>
-
-        <Card className="shadow-sm border border-gray-100">
-          <CardHeader title="Top Proyectos por Presupuesto" />
-          <CardBody>
-            <div className="space-y-4 pt-2">
-              {Array.isArray(proyectos) && proyectos.length > 0 ? (
-                proyectos
-                  .sort((a: Proyecto, b: Proyecto) => Number(b.presupuesto_total) - Number(a.presupuesto_total))
-                  .slice(0, 5)
-                  .map((proyecto: Proyecto, index: number) => {
-                    return (
-                      <div key={proyecto.id_proyecto} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-transparent hover:border-blue-100">
-                        <div className="flex items-center gap-3">
-                          <span className="text-sm font-bold text-slate-400">#{index + 1}</span>
-                          <span className="text-sm font-semibold text-gray-800">{proyecto.nombre}</span>
-                        </div>
-                        <span className="text-sm font-bold text-blue-600 bg-white px-3 py-1 rounded-full shadow-sm border border-gray-100">
-                          Bs. {Number(proyecto.presupuesto_total).toLocaleString('es-BO', { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                    );
-                  })
-              ) : (
-                <p className="text-center text-gray-500 py-8">No hay proyectos suficientes.</p>
-              )}
+        <div className="bg-slate-900/60 p-5 rounded-2xl border border-slate-800 shadow-xl backdrop-blur-sm space-y-4">
+          <h3 className="text-sm font-bold text-white tracking-tight border-b border-slate-800 pb-3">
+            Presupuesto por Proyecto (Top 8)
+          </h3>
+          {chartDataReales.length > 0 ? (
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={chartDataReales} margin={{ top: 10, right: 10, left: 15, bottom: 25 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" />
+                <XAxis 
+                  dataKey="name" 
+                  tick={{ fill: '#94a3b8', fontSize: 10 }} 
+                  axisLine={false} 
+                  tickLine={false}
+                  interval={0}
+                  angle={-15}
+                  textAnchor="end"
+                />
+                <YAxis 
+                  tick={{ fill: '#94a3b8', fontSize: 10 }} 
+                  axisLine={false} 
+                  tickLine={false}
+                  tickFormatter={(val) => `Bs. ${val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val}`}
+                />
+                <Tooltip
+                  formatter={(value) => [`Bs. ${Number(value).toLocaleString('es-BO', { minimumFractionDigits: 2 })}`, 'Presupuesto']}
+                  contentStyle={{
+                    backgroundColor: '#020617',
+                    borderColor: '#334155',
+                    borderRadius: '12px',
+                    color: '#f8fafc',
+                    fontSize: '12px',
+                  }}
+                />
+                <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', color: '#94a3b8', paddingTop: '10px' }} />
+                <Bar dataKey="Presupuesto" fill="#3b82f6" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-[280px] flex items-center justify-center text-slate-500 text-xs italic">
+              Aún no hay datos de proyectos para visualizar
             </div>
-          </CardBody>
-        </Card>
+          )}
+        </div>
+
+        {/* Ranking de Proyectos por Presupuesto */}
+        <div className="bg-slate-900/60 p-5 rounded-2xl border border-slate-800 shadow-xl backdrop-blur-sm space-y-4">
+          <h3 className="text-sm font-bold text-white tracking-tight border-b border-slate-800 pb-3">
+            Top 5 Proyectos con Mayor Inversión
+          </h3>
+          <div className="space-y-3 pt-1">
+            {Array.isArray(proyectos) && proyectos.length > 0 ? (
+              [...proyectos]
+                .sort((a: Proyecto, b: Proyecto) => Number(b.presupuesto_total || 0) - Number(a.presupuesto_total || 0))
+                .slice(0, 5)
+                .map((proyecto: Proyecto, index: number) => (
+                  <div
+                    key={proyecto.id_proyecto}
+                    className="flex items-center justify-between p-3 bg-slate-950/70 rounded-xl border border-slate-800/80 hover:border-slate-700 transition-all"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-mono font-bold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">
+                        #{index + 1}
+                      </span>
+                      <span className="text-xs font-bold text-slate-200">{proyecto.nombre}</span>
+                    </div>
+                    <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-lg border border-emerald-500/20">
+                      Bs. {Number(proyecto.presupuesto_total || 0).toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                ))
+            ) : (
+              <p className="text-center text-slate-500 text-xs py-12 italic">No hay suficientes proyectos registrados.</p>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* Tabla de Historial */}
-      <Card className="shadow-sm border border-gray-100">
-        <CardHeader title="Seguimiento de Progreso" />
-        <CardBody className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-gray-50 text-gray-600 uppercase text-xs font-bold tracking-wider">
-                <tr>
-                  <th className="px-6 py-4">Proyecto</th>
-                  <th className="px-6 py-4">Presupuesto</th>
-                  <th className="px-6 py-4">Estado</th>
-                  <th className="px-6 py-4 min-w-[200px]">Progreso de Tareas</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {Array.isArray(proyectos) &&
-                  proyectos.map((proyecto: Proyecto) => {
-                    const progresoValue = proyecto.estado === 'Completado' 
-                      ? 100 
-                      : Math.max(15, (proyecto.id_proyecto * 37) % 85);
-
-                    return (
-                      <tr key={proyecto.id_proyecto} className="hover:bg-gray-50 transition-colors bg-white">
-                        <td className="px-6 py-4 font-semibold text-gray-800">
-                          {proyecto.nombre}
-                        </td>
-                        <td className="px-6 py-4 text-gray-600 font-medium">
-                          Bs. {Number(proyecto.presupuesto_total).toLocaleString('es-BO', { minimumFractionDigits: 2 })}
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className={`px-3 py-1 rounded-full text-xs font-bold border ${
-                            proyecto.estado === 'Activo' ? 'bg-green-50 text-green-700 border-green-200' :
-                            proyecto.estado === 'Pausado' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
-                            'bg-purple-50 text-purple-700 border-purple-200'
-                          }`}>
-                            {proyecto.estado}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-3">
-                            <div className="flex-1 bg-gray-200 rounded-full h-2.5 overflow-hidden border border-gray-300">
-                              <div
-                                className={`h-2.5 rounded-full transition-all duration-1000 ${
-                                  progresoValue === 100 ? 'bg-purple-500' : 'bg-blue-600'
-                                }`}
-                                style={{ width: `${progresoValue}%` }}
-                              />
-                            </div>
-                            <span className="text-xs font-bold text-gray-600 w-9 text-right">
-                              {progresoValue}%
-                            </span>
+      {/* Tabla de Seguimiento de Progreso Real */}
+      <div className="bg-slate-900/60 rounded-2xl border border-slate-800 shadow-xl backdrop-blur-sm overflow-hidden">
+        <div className="p-5 border-b border-slate-800">
+          <h3 className="text-sm font-bold text-white tracking-tight">Seguimiento Operativo y Avance de Tareas</h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs text-left text-slate-300">
+            <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] font-bold tracking-wider border-b border-slate-800">
+              <tr>
+                <th className="px-6 py-3.5">Proyecto</th>
+                <th className="px-6 py-3.5">Presupuesto</th>
+                <th className="px-6 py-3.5">Estado</th>
+                <th className="px-6 py-3.5 min-w-[220px]">Avance Real de Tareas</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/60 bg-slate-900/30">
+              {Array.isArray(proyectos) && proyectos.length > 0 ? (
+                proyectos.map((proyecto: Proyecto) => {
+                  const progreso = obtenerProgresoReal(proyecto.id_proyecto);
+                  return (
+                    <tr key={proyecto.id_proyecto} className="hover:bg-slate-950/60 transition-colors">
+                      <td className="px-6 py-4 font-bold text-slate-100 flex items-center gap-2.5">
+                        <svg className="w-4 h-4 text-blue-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                        </svg>
+                        <span>{proyecto.nombre}</span>
+                      </td>
+                      <td className="px-6 py-4 font-mono font-semibold text-slate-300">
+                        Bs. {Number(proyecto.presupuesto_total || 0).toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span
+                          className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase border tracking-wider ${
+                            estadoBadgeStyles[proyecto.estado] || 'bg-slate-800 text-slate-300 border-slate-700'
+                          }`}
+                        >
+                          {proyecto.estado}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="flex-1 bg-slate-950 rounded-full h-2 border border-slate-800 overflow-hidden">
+                            <div
+                              className={`h-2 rounded-full transition-all duration-700 ${
+                                progreso === 100 ? 'bg-emerald-500' : 'bg-blue-500'
+                              }`}
+                              style={{ width: `${progreso}%` }}
+                            />
                           </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-              </tbody>
-            </table>
-          </div>
-        </CardBody>
-      </Card>
+                          <span className="text-xs font-mono font-bold text-slate-400 w-8 text-right">
+                            {progreso}%
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={4} className="text-center py-8 text-slate-500 italic">
+                    Sin proyectos registrados para generar reporte.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }

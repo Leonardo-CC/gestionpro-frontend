@@ -12,6 +12,8 @@ export interface Tarea {
   codigo?: string;
   fecha_vencimiento?: string;
   prioridad?: string;
+  horas_estimadas?: number;
+  horas_invertidas?: number;
   responsable_nombre?: string;
 }
 
@@ -24,6 +26,7 @@ interface KanbanBoardProps {
   onTareaClick: (tarea: Tarea) => void;
   onCrearTarea?: (estado: string) => void;
   onCambiarEstadoTarea?: (idTarea: number, nuevoEstado: string) => Promise<void> | void;
+  onRegistrarHoras?: (tarea: Tarea) => void;
   onScrollChange?: (scrollRatio: number, viewportRatio: number) => void;
 }
 
@@ -40,6 +43,7 @@ const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(({
   onTareaClick,
   onCrearTarea,
   onCambiarEstadoTarea,
+  onRegistrarHoras,
   onScrollChange,
 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -155,18 +159,43 @@ const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(({
                       ? tarea.responsable_nombre.substring(0, 2).toUpperCase()
                       : 'SA';
 
+                    // CÁLCULO DE EFICIENCIA PARA EL TABLERO KANBAN
+                    const estimadas = Math.round(Number(tarea.horas_estimadas || 0));
+                    const invertidas = Math.round(Number(tarea.horas_invertidas || 0));
+                    const tieneHoras = invertidas > 0;
+                    const estaExcedido = estimadas > 0 && invertidas > estimadas;
+
+                    // Estilos dinámicos según el estado de eficiencia
+                    let badgeEstilo = 'bg-slate-950 text-slate-300 border-slate-700/70 hover:border-blue-500/50';
+                    let textoBadge = estimadas > 0 ? `${estimadas}h` : '+Hrs';
+
+                    if (tieneHoras) {
+                      if (estaExcedido) {
+                        badgeEstilo = 'bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse';
+                        textoBadge = `${invertidas}/${estimadas}h`;
+                      } else {
+                        badgeEstilo = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
+                        textoBadge = `${invertidas}/${estimadas > 0 ? estimadas : '∞'}h`;
+                      }
+                    }
+
                     return (
                       <div
                         key={tarea.id_tarea}
                         draggable
                         onDragStart={(e) => handleDragStart(e, tarea.id_tarea)}
                         onClick={() => onTareaClick(tarea)}
-                        className="bg-slate-800/90 hover:bg-slate-800 border border-slate-700/60 hover:border-blue-500/50 rounded-lg p-3.5 shadow-md cursor-pointer transition-all group"
+                        className={`bg-slate-800/90 hover:bg-slate-800 border rounded-lg p-3.5 shadow-md cursor-pointer transition-all group ${
+                          estaExcedido ? 'border-rose-500/40' : 'border-slate-700/60 hover:border-blue-500/50'
+                        }`}
                       >
                         {tarea.proyecto_nombre && (
                           <div className="mb-2">
-                            <span className="text-[10px] font-semibold bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 px-2 py-0.5 rounded">
-                              📁 {tarea.proyecto_nombre}
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 px-2 py-0.5 rounded">
+                              <svg className="w-3 h-3 text-indigo-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                              </svg>
+                              <span>{tarea.proyecto_nombre}</span>
                             </span>
                           </div>
                         )}
@@ -184,13 +213,47 @@ const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(({
                           {tarea.titulo}
                         </p>
 
+                        {/* Pie de la Tarjeta */}
                         <div className="flex items-center justify-between pt-2 border-t border-slate-700/40 mt-2">
                           <span className="text-[11px] text-slate-400">{formatFecha(tarea.fecha_vencimiento) || 'Sin fecha'}</span>
-                          <div
-                            title={tarea.responsable_nombre || 'Sin asignar'}
-                            className="w-6 h-6 rounded-full bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center text-[10px] font-bold"
-                          >
-                            {iniciales}
+                          
+                          <div className="flex items-center gap-2">
+                            {/* Botón Inteligente de Horas y Eficiencia */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation(); // Previene abrir el modal de detalles
+                                if (onRegistrarHoras) onRegistrarHoras(tarea);
+                              }}
+                              className={`flex items-center gap-1.5 text-[10px] font-mono font-bold px-2 py-0.5 rounded border transition-colors ${badgeEstilo}`}
+                              title={
+                                estaExcedido
+                                  ? `¡Alerta! Tarea excedida: ${invertidas}h invertidas de ${estimadas}h estimadas`
+                                  : 'Registrar / Ver Horas Trabajadas'
+                              }
+                            >
+                              {estaExcedido ? (
+                                <svg className="w-3 h-3 text-rose-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
+                              ) : tieneHoras ? (
+                                <svg className="w-3 h-3 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                                </svg>
+                              ) : (
+                                <svg className="w-3 h-3 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                              )}
+                              <span>{textoBadge}</span>
+                            </button>
+
+                            <div
+                              title={tarea.responsable_nombre || 'Sin asignar'}
+                              className="w-6 h-6 rounded-full bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center text-[10px] font-bold"
+                            >
+                              {iniciales}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -199,10 +262,14 @@ const KanbanBoard = forwardRef<KanbanBoardRef, KanbanBoardProps>(({
                 </div>
 
                 <button
+                  type="button"
                   onClick={() => onCrearTarea && onCrearTarea(col.id)}
-                  className="m-2 p-2 text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg border border-dashed border-slate-800 hover:border-slate-700 transition-all text-center"
+                  className="m-2 p-2 text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg border border-dashed border-slate-800 hover:border-slate-700 transition-all text-center flex items-center justify-center gap-1"
                 >
-                  + Agregar Tarea
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                  </svg>
+                  <span>Agregar Tarea</span>
                 </button>
               </div>
             );

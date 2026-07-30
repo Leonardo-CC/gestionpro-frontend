@@ -1,4 +1,5 @@
 from django.utils import timezone
+from django.db.models import Sum
 from rest_framework import serializers
 from api.models import (
     Usuarios, Proyectos, Tareas, Asignaciones,
@@ -12,7 +13,13 @@ class UsuariosSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+from django.db.models import Sum, F, FloatField
+from django.db.models.functions import Cast
+
 class ProyectosSerializer(serializers.ModelSerializer):
+    costo_invertido = serializers.SerializerMethodField()
+    presupuesto_restante = serializers.SerializerMethodField()
+
     class Meta:
         model = Proyectos
         fields = '__all__'
@@ -20,21 +27,57 @@ class ProyectosSerializer(serializers.ModelSerializer):
             'id_gerente': {'required': False}
         }
 
+    # 💡 CALCULA EL COSTO REAL EN BASE A (HORAS TRABAJADAS * TARIFA POR HORA DEL USUARIO)
+    def get_costo_invertido(self, obj):
+        try:
+            # Trae todos los registros de horas de las tareas pertenecientes a este proyecto
+            registros = RegistroHoras.objects.filter(id_tarea__id_proyecto=obj.id_proyecto)
+            
+            costo_total = 0.0
+            for reg in registros:
+                horas = float(reg.horas_trabajadas or 0)
+                # Si el registro de horas tiene un usuario asignado, obtenemos su tarifa
+                tarifa = float(reg.id_usuario.tarifa_hora or 0) if reg.id_usuario else 0.0
+                costo_total += (horas * tarifa)
+                
+            return round(costo_total, 2)
+        except Exception as e:
+            print(f"Error calculando costo_invertido para proyecto {obj.id_proyecto}: {e}")
+            return 0.0
+
+    # 💡 CALCULA EL SALDO DEL PRESUPUESTO
+    def get_presupuesto_restante(self, obj):
+        try:
+            presupuesto = float(obj.presupuesto_total or 0)
+            costo = self.get_costo_invertido(obj)
+            return round(presupuesto - costo, 2)
+        except Exception:
+            return float(obj.presupuesto_total or 0)
 
 class TareasSerializer(serializers.ModelSerializer):
     responsable_nombre = serializers.SerializerMethodField()
-    # Atrapa el UUID/ID enviado desde Next.js sin romper la estructura de la tabla Tareas
+    horas_invertidas = serializers.SerializerMethodField()
     usuario_asignado = serializers.CharField(write_only=True, required=False)
 
     class Meta:
         model = Tareas
         fields = '__all__'
         extra_kwargs = {
-            'fecha_inicio': {'required': False}  # Permite omitir este campo en la Petición
+            'fecha_inicio': {'required': False}
         }
 
+    # 💡 CÁLCULO DIRECTO Y ROBUSTO SIN DEPENDER DE RELATED_NAME
+    def get_horas_invertidas(self, obj):
+        try:
+            total = RegistroHoras.objects.filter(id_tarea=obj.id_tarea).aggregate(
+                total=Sum('horas_trabajadas')
+            )['total']
+            return float(total) if total is not None else 0.0
+        except Exception as e:
+            print(f"[SERIALIZER WARNING] Error al calcular horas para tarea {obj.id_tarea}: {e}")
+            return 0.0
+
     def validate_estado(self, value):
-        """ Normaliza el estado para asegurar compatibilidad con las 5 columnas del Kanban Jira """
         MAPEO_ESTADOS = {
             'POR_HACER': 'POR_HACER',
             'POR HACER': 'POR_HACER',
@@ -58,7 +101,6 @@ class TareasSerializer(serializers.ModelSerializer):
 
     def get_responsable_nombre(self, obj):
         try:
-            # Usamos .asignaciones en lugar de .asignaciones_set por el related_name del modelo
             asignacion = obj.asignaciones.first() if hasattr(obj, 'asignaciones') else obj.asignaciones_set.first()
             if asignacion and asignacion.usuario:
                 return asignacion.usuario.nombre
@@ -67,7 +109,6 @@ class TareasSerializer(serializers.ModelSerializer):
         return "Sin asignar"
 
     def create(self, validated_data):
-        # 💡 ASIGNACIÓN AUTOMÁTICA DE FECHA INICIO AL CREAR TAREA
         if not validated_data.get('fecha_inicio'):
             validated_data['fecha_inicio'] = timezone.now().date()
 
@@ -76,7 +117,6 @@ class TareasSerializer(serializers.ModelSerializer):
         
         if usuario_id:
             try:
-                # Buscamos la instancia de usuario por su UUID
                 usuario_obj = Usuarios.objects.filter(id_usuario=usuario_id).first()
                 if usuario_obj:
                     Asignaciones.objects.create(
@@ -96,7 +136,6 @@ class TareasSerializer(serializers.ModelSerializer):
             try:
                 usuario_obj = Usuarios.objects.filter(id_usuario=usuario_id).first()
                 if usuario_obj:
-                    # Buscamos la asignación previa
                     asignacion = instance.asignaciones.first() if hasattr(instance, 'asignaciones') else instance.asignaciones_set.first()
                     if asignacion:
                         asignacion.usuario = usuario_obj
@@ -111,7 +150,6 @@ class TareasSerializer(serializers.ModelSerializer):
                 print(f"Error actualizando usuario asignado: {e}")
         return tarea
 
-
 class AsignacionesSerializer(serializers.ModelSerializer):
     class Meta:
         model = Asignaciones
@@ -124,39 +162,77 @@ class ComentariosTareaSerializer(serializers.ModelSerializer):
     class Meta:
         model = ComentariosTarea
         fields = '__all__'
+        extra_kwargs = {
+            'id_usuario': {'required': False}
+        }
 
     def get_usuario_nombre(self, obj):
         try:
             if obj.id_usuario:
-                # 1. Si id_usuario es una ForeignKey/Objeto con atributo nombre
                 if hasattr(obj.id_usuario, 'nombre') and obj.id_usuario.nombre:
                     return obj.id_usuario.nombre
                 
-                # 2. Si id_usuario es un UUID o string
                 usr_id = getattr(obj.id_usuario, 'id_usuario', obj.id_usuario)
                 usr = Usuarios.objects.filter(id_usuario=str(usr_id)).first()
                 if usr:
                     return usr.nombre or usr.email
         except Exception as e:
-            print(f"Error resolviendo usuario_nombre: {e}")
+            print(f"Error resolviendo usuario_nombre en comentario: {e}")
         return "Usuario"
 
+
 class ArchivosTareaSerializer(serializers.ModelSerializer):
+    usuario_nombre = serializers.SerializerMethodField()
+
     class Meta:
         model = ArchivosTarea
         fields = '__all__'
+        extra_kwargs = {
+            'id_usuario': {'required': False}
+        }
+
+    def get_usuario_nombre(self, obj):
+        try:
+            if hasattr(obj, 'id_usuario') and obj.id_usuario:
+                return getattr(obj.id_usuario, 'nombre', None) or getattr(obj.id_usuario, 'email', None)
+        except Exception:
+            pass
+        return "Desarrollador"
 
 
 class RegistroHorasSerializer(serializers.ModelSerializer):
+    usuario_nombre = serializers.SerializerMethodField()
+
     class Meta:
         model = RegistroHoras
         fields = '__all__'
+        extra_kwargs = {
+            'id_usuario': {'required': False}
+        }
+
+    def get_usuario_nombre(self, obj):
+        try:
+            if obj.id_usuario:
+                return obj.id_usuario.nombre or obj.id_usuario.email
+        except Exception:
+            pass
+        return "Desarrollador"
 
 
 class HistorialPresupuestoSerializer(serializers.ModelSerializer):
+    usuario_nombre = serializers.SerializerMethodField()
+
     class Meta:
         model = HistorialPresupuesto
         fields = '__all__'
+
+    def get_usuario_nombre(self, obj):
+        try:
+            if obj.usuario:
+                return obj.usuario.nombre or obj.usuario.email
+        except Exception:
+            pass
+        return "Gerencia / Sistema"
 
 
 class LogsAuditoriaSerializer(serializers.ModelSerializer):

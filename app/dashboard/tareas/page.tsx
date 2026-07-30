@@ -1,19 +1,35 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import useSWR from 'swr';
 import api from '../../../services/api';
 import KanbanBoard, { Tarea, KanbanBoardRef } from '../../../components/KanbanBoard';
 import TareaDetailModal from '../../../components/TareaDetailModal';
+import RegistroHorasModal from '../../../components/RegistroHorasModal';
 import { Modal } from '../../../components/Modal';
 import { Alert } from '../../../components/Alert';
 
-export default function TareasPage() {
+function TareasContent() {
+  const searchParams = useSearchParams();
+  const proyectoParam = searchParams.get('proyecto');
+
   const [selectedProyectoId, setSelectedProyectoId] = useState<string>('TODOS');
   const [selectedTarea, setSelectedTarea] = useState<Tarea | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
 
-  // Estados del Minimapa Arriba
+  // Modal para Registro de Horas
+  const [tareaParaHoras, setTareaParaHoras] = useState<Tarea | null>(null);
+  const [isHorasModalOpen, setIsHorasModalOpen] = useState(false);
+
+  // Captura el proyecto de la URL (?proyecto=ID)
+  useEffect(() => {
+    if (proyectoParam) {
+      setSelectedProyectoId(String(proyectoParam));
+    }
+  }, [proyectoParam]);
+
+  // Estados del Minimapa
   const [scrollRatio, setScrollRatio] = useState(0);
   const [viewportRatio, setViewportRatio] = useState(1);
   const kanbanRef = useRef<KanbanBoardRef>(null);
@@ -23,12 +39,12 @@ export default function TareasPage() {
     revalidateOnFocus: false,
   });
 
-  // 2. Cargar Usuarios para Asignación
+  // 2. Cargar Usuarios
   const { data: usuarios = [] } = useSWR('/usuarios', () => api.getUsuarios(), {
     revalidateOnFocus: false,
   });
 
-  // 3. Cargar Tareas desde la API
+  // 3. Cargar Tareas
   const [tareas, setTareas] = useState<Tarea[]>([]);
   const [loadingTareas, setLoadingTareas] = useState(false);
 
@@ -78,7 +94,7 @@ export default function TareasPage() {
     }
   };
 
-  // 7. ESTADOS Y LÓGICA PARA CREAR NUEVA TAREA
+  // 7. Lógica para Crear Nueva Tarea
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -90,6 +106,7 @@ export default function TareasPage() {
     estado: 'POR_HACER',
     prioridad: 'Media',
     fecha_vencimiento: '',
+    horas_estimadas: '',
     usuario_asignado: '',
   });
 
@@ -104,6 +121,7 @@ export default function TareasPage() {
       estado: estadoInicial,
       prioridad: 'Media',
       fecha_vencimiento: '',
+      horas_estimadas: '',
       usuario_asignado: '',
     });
     setErrorMsg('');
@@ -123,7 +141,7 @@ export default function TareasPage() {
 
     setCreateLoading(true);
     setErrorMsg('');
-  
+
     try {
       const payload: any = {
         titulo: newTareaData.titulo.trim(),
@@ -131,15 +149,15 @@ export default function TareasPage() {
         id_proyecto: Number(newTareaData.id_proyecto),
         estado: newTareaData.estado,
         prioridad: newTareaData.prioridad,
-        // 💡 ESTO ELIMINA EL ERROR 400 EN RENDER/VERCEL:
-        fecha_inicio: new Date().toISOString().split('T')[0], 
+        fecha_inicio: new Date().toISOString().split('T')[0],
         fecha_vencimiento: newTareaData.fecha_vencimiento || null,
+        horas_estimadas: parseFloat(newTareaData.horas_estimadas) || null,
       };
-  
+
       if (newTareaData.usuario_asignado) {
         payload.usuario_asignado = newTareaData.usuario_asignado;
       }
-  
+
       await api.createTarea(payload);
       setSuccessMsg('Tarea creada correctamente');
       setIsCreateModalOpen(false);
@@ -156,6 +174,11 @@ export default function TareasPage() {
     }
   };
 
+  const handleOpenRegistroHoras = (tarea: Tarea) => {
+    setTareaParaHoras(tarea);
+    setIsHorasModalOpen(true);
+  };
+
   return (
     <div className="space-y-6">
       {/* Alertas */}
@@ -170,17 +193,17 @@ export default function TareasPage() {
         </Alert>
       )}
 
-      {/* Encabezado y Filtro por Proyecto */}
+      {/* Encabezado y Filtros */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-800 pb-5">
         <div>
           <h1 className="text-2xl font-bold text-white tracking-tight">Tablero General de Tareas</h1>
           <p className="text-slate-400 text-xs mt-1">
-            Visualiza, arrastra y organiza el flujo operativo de tus proyectos
+            Visualiza, arrastra y gestiona el rendimiento del equipo en tiempo real
           </p>
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Minimapa Jira Arriba */}
+          {/* Minimapa Arriba */}
           <div className="flex items-center gap-2 bg-slate-900 border border-slate-700/80 px-2.5 py-1.5 rounded-lg shadow-sm">
             <span className="text-[11px] font-semibold text-slate-400">Vista:</span>
             <div className="relative flex gap-1 h-5 px-1 py-0.5 bg-slate-950 rounded border border-slate-800 cursor-pointer">
@@ -203,25 +226,37 @@ export default function TareasPage() {
             </div>
           </div>
 
-          <select
-            value={selectedProyectoId}
-            onChange={(e) => setSelectedProyectoId(e.target.value)}
-            className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer [color-scheme:dark]"
-          >
-            <option value="TODOS" className="bg-slate-900 text-slate-100">🌐 Todos los Proyectos</option>
-            {Array.isArray(proyectos) &&
-              proyectos.map((p: any) => (
-                <option key={p.id_proyecto} value={String(p.id_proyecto)} className="bg-slate-900 text-slate-100">
-                  📁 {p.nombre}
-                </option>
-              ))}
-          </select>
+          {/* Selector de Proyecto con Icono SVG */}
+          <div className="relative">
+            <select
+              value={selectedProyectoId}
+              onChange={(e) => setSelectedProyectoId(e.target.value)}
+              className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg pl-3 pr-8 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer appearance-none [color-scheme:dark]"
+            >
+              <option value="TODOS" className="bg-slate-900 text-slate-100">Todos los Proyectos</option>
+              {Array.isArray(proyectos) &&
+                proyectos.map((p: any) => (
+                  <option key={p.id_proyecto} value={String(p.id_proyecto)} className="bg-slate-900 text-slate-100">
+                    {p.nombre}
+                  </option>
+                ))}
+            </select>
+            <div className="absolute inset-y-0 right-0 flex items-center pr-2.5 pointer-events-none text-slate-400">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </div>
 
           <button
+            type="button"
             onClick={() => handleOpenCrearTarea('POR_HACER')}
-            className="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs rounded-lg transition-colors shadow-md"
+            className="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs rounded-lg transition-colors shadow-md flex items-center gap-1.5"
           >
-            + Nueva Tarea
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+            </svg>
+            <span>Nueva Tarea</span>
           </button>
         </div>
       </div>
@@ -240,6 +275,9 @@ export default function TareasPage() {
               setSelectedTarea(tarea);
               setIsDetailOpen(true);
             }}
+            onRegistrarHoras={(tarea) => {
+              handleOpenRegistroHoras(tarea);
+            }}
             onCrearTarea={(estadoColumna) => handleOpenCrearTarea(estadoColumna)}
             onCambiarEstadoTarea={handleCambiarEstadoTarea}
             onScrollChange={(sRatio, vRatio) => {
@@ -250,7 +288,7 @@ export default function TareasPage() {
         )}
       </div>
 
-      {/* Modal para ver Detalles de Tarea y Comentarios */}
+      {/* Modal para Ver Detalles de Tarea y Comentarios */}
       <TareaDetailModal
         tarea={selectedTarea}
         isOpen={isDetailOpen}
@@ -258,7 +296,20 @@ export default function TareasPage() {
         onUpdateSuccess={loadTareas}
       />
 
-      {/* MODAL PARA CREAR NUEVA TAREA */}
+      {/* Modal para Registro de Horas */}
+      {tareaParaHoras && (
+        <RegistroHorasModal
+          tarea={tareaParaHoras}
+          isOpen={isHorasModalOpen}
+          onClose={() => {
+            setIsHorasModalOpen(false);
+            setTareaParaHoras(null);
+          }}
+          onHorasUpdated={loadTareas}
+        />
+      )}
+
+      {/* Modal para Crear Nueva Tarea */}
       <Modal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
@@ -293,7 +344,7 @@ export default function TareasPage() {
                 {Array.isArray(proyectos) &&
                   proyectos.map((p: any) => (
                     <option key={p.id_proyecto} value={String(p.id_proyecto)} className="bg-slate-900 text-slate-100">
-                      📁 {p.nombre}
+                      {p.nombre}
                     </option>
                   ))}
               </select>
@@ -306,11 +357,11 @@ export default function TareasPage() {
                 onChange={(e) => setNewTareaData({ ...newTareaData, usuario_asignado: e.target.value })}
                 className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-slate-950 cursor-pointer [color-scheme:dark]"
               >
-                <option value="" className="bg-slate-900 text-slate-100">👤 Sin Asignar</option>
+                <option value="" className="bg-slate-900 text-slate-100">Sin Asignar</option>
                 {Array.isArray(usuarios) &&
                   usuarios.map((u: any) => (
                     <option key={u.id_usuario} value={String(u.id_usuario)} className="bg-slate-900 text-slate-100">
-                      👤 {u.nombre || u.email}
+                      {u.nombre || u.email}
                     </option>
                   ))}
               </select>
@@ -328,13 +379,13 @@ export default function TareasPage() {
             />
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-4 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">Estado</label>
               <select
                 value={newTareaData.estado}
                 onChange={(e) => setNewTareaData({ ...newTareaData, estado: e.target.value })}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-slate-950 cursor-pointer [color-scheme:dark]"
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer [color-scheme:dark]"
               >
                 <option value="IDEA" className="bg-slate-900 text-slate-100">Propuestas e Ideas</option>
                 <option value="POR_HACER" className="bg-slate-900 text-slate-100">Por Ejecutar</option>
@@ -349,12 +400,25 @@ export default function TareasPage() {
               <select
                 value={newTareaData.prioridad}
                 onChange={(e) => setNewTareaData({ ...newTareaData, prioridad: e.target.value })}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-slate-950 cursor-pointer [color-scheme:dark]"
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer [color-scheme:dark]"
               >
                 <option value="Baja" className="bg-slate-900 text-slate-100">Baja</option>
                 <option value="Media" className="bg-slate-900 text-slate-100">Media</option>
                 <option value="Alta" className="bg-slate-900 text-slate-100">Alta</option>
               </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">Horas Est.</label>
+              <input
+                type="number"
+                step="0.5"
+                min="0"
+                placeholder="Ej: 8"
+                value={newTareaData.horas_estimadas}
+                onChange={(e) => setNewTareaData({ ...newTareaData, horas_estimadas: e.target.value })}
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+              />
             </div>
 
             <div>
@@ -364,7 +428,7 @@ export default function TareasPage() {
                 min={new Date().toISOString().split('T')[0]}
                 value={newTareaData.fecha_vencimiento}
                 onChange={(e) => setNewTareaData({ ...newTareaData, fecha_vencimiento: e.target.value })}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-slate-950 [color-scheme:dark]"
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 [color-scheme:dark]"
               />
             </div>
           </div>
@@ -380,7 +444,7 @@ export default function TareasPage() {
             <button
               type="submit"
               disabled={createLoading}
-              className="px-4 py-2 text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors disabled:opacity-50"
+              className="px-4 py-2 text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors disabled:opacity-50 shadow-md"
             >
               {createLoading ? 'Guardando...' : 'Guardar Tarea'}
             </button>
@@ -388,5 +452,13 @@ export default function TareasPage() {
         </form>
       </Modal>
     </div>
+  );
+}
+
+export default function TareasPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center p-12 text-slate-400 text-sm">Cargando tablero...</div>}>
+      <TareasContent />
+    </Suspense>
   );
 }

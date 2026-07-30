@@ -1,4 +1,12 @@
-from rest_framework import viewsets
+from decimal import Decimal
+import requests
+from django.conf import settings
+from rest_framework import viewsets, status
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import AllowAny
+from drf_yasg.utils import swagger_auto_schema
+
 from api.models import (
     Usuarios, Proyectos, Tareas, Asignaciones,
     ComentariosTarea, ArchivosTarea, RegistroHoras,
@@ -13,10 +21,12 @@ from api.serializers import (
 )
 from api.permissions import RoleBasedPermission
 
+
 class UsuariosViewSet(viewsets.ModelViewSet):
     queryset = Usuarios.objects.all()
     serializer_class = UsuariosSerializer
     permission_classes = [RoleBasedPermission]
+
 
 class ProyectosViewSet(viewsets.ModelViewSet):
     queryset = Proyectos.objects.all()
@@ -24,18 +34,43 @@ class ProyectosViewSet(viewsets.ModelViewSet):
     permission_classes = [RoleBasedPermission]
 
     def perform_create(self, serializer):
-        from .models import Usuarios
         try:
-            # MODO DEMO: Agarramos directamente al primer usuario registrado en tu sistema
             gerente_seguro = Usuarios.objects.first()
-            
-            # Guardamos el proyecto forzando ese usuario como gerente
             serializer.save(id_gerente=gerente_seguro)
-            
         except Exception as e:
-            # Si pasa absolutamente cualquier cosa, lo imprimimos pero NO rompemos la página
             print("Error en Modo Demo salvando proyecto:", str(e))
             serializer.save()
+
+    def perform_update(self, serializer):
+        proyecto_previo = self.get_object()
+        presupuesto_anterior = proyecto_previo.presupuesto_total
+
+        proyecto_actualizado = serializer.save()
+        nuevo_presupuesto = proyecto_actualizado.presupuesto_total
+
+        if presupuesto_anterior is not None and nuevo_presupuesto is not None:
+            if Decimal(str(presupuesto_anterior)) != Decimal(str(nuevo_presupuesto)):
+                try:
+                    usuario_activo = None
+                    
+                    if hasattr(self.request, 'user') and hasattr(self.request.user, 'email'):
+                        usuario_activo = Usuarios.objects.filter(email=self.request.user.email).first()
+
+                    if not usuario_activo:
+                        usuario_activo = Usuarios.objects.filter(nombre__icontains='Leonardo').first()
+
+                    if not usuario_activo:
+                        usuario_activo = Usuarios.objects.first()
+
+                    HistorialPresupuesto.objects.create(
+                        proyecto=proyecto_actualizado,
+                        monto_anterior=presupuesto_anterior,
+                        monto_nuevo=nuevo_presupuesto,
+                        usuario=usuario_activo
+                    )
+                    print(f"[AUDITORÍA] Presupuesto cambiado: Bs. {presupuesto_anterior} -> Bs. {nuevo_presupuesto}")
+                except Exception as e:
+                    print(f"Error registrando historial de presupuesto: {e}")
 
 class TareasViewSet(viewsets.ModelViewSet):
     serializer_class = TareasSerializer
@@ -43,7 +78,6 @@ class TareasViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = Tareas.objects.all()
-        # Capturamos el parámetro 'proyecto' que manda React en la URL (ej: /api/tareas/?proyecto=1)
         proyecto_id = self.request.query_params.get('proyecto')
         if proyecto_id is not None:
             queryset = queryset.filter(id_proyecto=proyecto_id)
@@ -54,32 +88,93 @@ class AsignacionesViewSet(viewsets.ModelViewSet):
     serializer_class = AsignacionesSerializer
     permission_classes = [RoleBasedPermission]
 
+
 class ComentariosTareaViewSet(viewsets.ModelViewSet):
     serializer_class = ComentariosTareaSerializer
     permission_classes = [RoleBasedPermission]
 
     def get_queryset(self):
-        queryset = ComentariosTarea.objects.all()
-        # Capturamos el parámetro 'tarea' que manda React (ej: /api/comentarios/?tarea=5)
+        queryset = ComentariosTarea.objects.all().order_by('-fecha_creacion')
         tarea_id = self.request.query_params.get('tarea')
         if tarea_id is not None:
             queryset = queryset.filter(id_tarea=tarea_id)
         return queryset
 
+    def perform_create(self, serializer):
+        try:
+            usuario_activo = None
+            if hasattr(self.request, 'user') and hasattr(self.request.user, 'email'):
+                usuario_activo = Usuarios.objects.filter(email=self.request.user.email).first()
+            if not usuario_activo:
+                usuario_activo = Usuarios.objects.filter(nombre__icontains='Leonardo').first() or Usuarios.objects.first()
+
+            serializer.save(id_usuario=usuario_activo)
+        except Exception as e:
+            print(f"Error asignando usuario en comentario: {e}")
+            serializer.save()
+
+
 class ArchivosTareaViewSet(viewsets.ModelViewSet):
-    queryset = ArchivosTarea.objects.all()
     serializer_class = ArchivosTareaSerializer
     permission_classes = [RoleBasedPermission]
 
+    def get_queryset(self):
+        queryset = ArchivosTarea.objects.all().order_by('-fecha_subida')
+        tarea_id = self.request.query_params.get('tarea')
+        if tarea_id is not None:
+            queryset = queryset.filter(id_tarea=tarea_id)
+        return queryset
+
+    def perform_create(self, serializer):
+        try:
+            usuario_activo = None
+            if hasattr(self.request, 'user') and hasattr(self.request.user, 'email'):
+                usuario_activo = Usuarios.objects.filter(email=self.request.user.email).first()
+            if not usuario_activo:
+                usuario_activo = Usuarios.objects.filter(nombre__icontains='Leonardo').first() or Usuarios.objects.first()
+
+            serializer.save(id_usuario=usuario_activo)
+        except Exception as e:
+            print(f"Error asignando usuario en archivo: {e}")
+            serializer.save()
+
+
 class RegistroHorasViewSet(viewsets.ModelViewSet):
-    queryset = RegistroHoras.objects.all()
     serializer_class = RegistroHorasSerializer
     permission_classes = [RoleBasedPermission]
 
+    def get_queryset(self):
+        queryset = RegistroHoras.objects.all().order_by('-fecha_creacion')
+        tarea_id = self.request.query_params.get('tarea')
+        if tarea_id is not None:
+            queryset = queryset.filter(id_tarea=tarea_id)
+        return queryset
+
+    def perform_create(self, serializer):
+        try:
+            usuario_activo = None
+            if hasattr(self.request, 'user') and hasattr(self.request.user, 'email'):
+                usuario_activo = Usuarios.objects.filter(email=self.request.user.email).first()
+            if not usuario_activo:
+                usuario_activo = Usuarios.objects.filter(nombre__icontains='Leonardo').first() or Usuarios.objects.first()
+
+            serializer.save(id_usuario=usuario_activo)
+        except Exception as e:
+            print(f"Error asignando usuario en registro de horas: {e}")
+            serializer.save()
+
+
 class HistorialPresupuestoViewSet(viewsets.ModelViewSet):
-    queryset = HistorialPresupuesto.objects.all()
     serializer_class = HistorialPresupuestoSerializer
     permission_classes = [RoleBasedPermission]
+
+    def get_queryset(self):
+        queryset = HistorialPresupuesto.objects.all().order_by('-fecha')
+        proyecto_id = self.request.query_params.get('proyecto')
+        if proyecto_id is not None:
+            queryset = queryset.filter(proyecto_id=proyecto_id)
+        return queryset
+
 
 class LogsAuditoriaViewSet(viewsets.ModelViewSet):
     queryset = LogsAuditoria.objects.all()
@@ -87,14 +182,9 @@ class LogsAuditoriaViewSet(viewsets.ModelViewSet):
     permission_classes = [RoleBasedPermission]
 
 
-import requests
-from django.conf import settings
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from rest_framework.permissions import AllowAny
-
-from drf_yasg.utils import swagger_auto_schema
+# ==========================================
+# VIEWS DE AUTENTICACIÓN (SUPABASE AUTH)
+# ==========================================
 
 class SignUpView(APIView):
     permission_classes = [AllowAny]
@@ -167,17 +257,13 @@ class LoginView(APIView):
 
         resp_data = response.json()
         
-        # Obtener el UUID del usuario logueado
         user_id = resp_data.get('user', {}).get('id')
         if user_id:
             try:
-                from api.models import Usuarios
                 user_profile = Usuarios.objects.get(id_usuario=user_id)
-                # Inyectar el rol y nombre reales de la base de datos de negocio
                 resp_data['user']['rol'] = user_profile.rol
                 resp_data['user']['nombre'] = user_profile.nombre
             except Usuarios.DoesNotExist:
-                # Fallback por defecto si aún no está sincronizado
                 resp_data['user']['rol'] = 'Miembro_Equipo'
                 resp_data['user']['nombre'] = 'Nuevo Usuario'
 

@@ -63,12 +63,17 @@ export default function Sidebar() {
     router.push('/login');
   };
 
-  // Menú de navegación con la sección dedicada a Tareas
+  // Menú de navegación completo
   const navItems = [
     { 
       name: 'Dashboard', 
       path: '/dashboard', 
       icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' 
+    },
+    { 
+      name: 'Cronograma', 
+      path: '/dashboard/cronograma', 
+      icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' 
     },
     { 
       name: 'Proyectos', 
@@ -84,6 +89,11 @@ export default function Sidebar() {
       name: 'Reportes', 
       path: '/dashboard/reportes', 
       icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' 
+    },
+    { 
+      name: 'Usuarios', 
+      path: '/dashboard/usuarios', 
+      icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z' 
     },
   ];
 
@@ -125,16 +135,31 @@ export default function Sidebar() {
 
       {/* Perfil del Usuario y Cierre de Sesión */}
       <div className="mt-auto border-t border-slate-800 bg-slate-950/40 p-4 shrink-0">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-9 h-9 rounded-full bg-blue-600/20 text-blue-400 flex items-center justify-center font-bold text-sm uppercase border border-blue-500/30 shrink-0">
+        
+        {/* Link Interactivo al Perfil */}
+        <Link 
+          href="/dashboard/perfil"
+          className={`flex items-center gap-3 mb-3 p-2 rounded-xl transition-all group cursor-pointer border ${
+            pathname === '/dashboard/perfil'
+              ? 'bg-slate-800/90 border-blue-500/40'
+              : 'border-transparent hover:bg-slate-800/60 hover:border-slate-700/60'
+          }`}
+          title="Ver y editar Mi Perfil"
+        >
+          <div className="w-9 h-9 rounded-full bg-blue-600/20 text-blue-400 flex items-center justify-center font-bold text-sm uppercase border border-blue-500/30 shrink-0 group-hover:border-blue-400 transition-colors">
             {userInitial}
           </div>
           <div className="overflow-hidden">
-            <p className="text-sm font-bold text-white truncate capitalize">{userName}</p>
-            <p className="text-[11px] text-blue-400 font-medium truncate capitalize">{userRole}</p>
+            <p className="text-sm font-bold text-white truncate capitalize group-hover:text-blue-400 transition-colors">
+              {userName}
+            </p>
+            <p className="text-[11px] text-blue-400 font-medium truncate capitalize">
+              {userRole}
+            </p>
           </div>
-        </div>
+        </Link>
 
+        {/* Botón Cerrar Sesión */}
         <button 
           onClick={handleLogout}
           className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-slate-800/80 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/30 text-slate-400 border border-slate-700 rounded-lg transition-all text-xs font-semibold group cursor-pointer"

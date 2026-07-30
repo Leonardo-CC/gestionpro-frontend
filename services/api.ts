@@ -101,6 +101,29 @@ class ApiService {
     return Array.isArray(usuarios) ? usuarios[0] : {};
   }
 
+  // 💡 NUEVO MÉTODO: Actualizar perfil del usuario autenticado
+  async updatePerfil(data: { nombre?: string; password?: string; [key: string]: any }) {
+    if (typeof window === 'undefined') throw new Error('No disponible en servidor');
+
+    // 1. Obtener perfil para conocer el id_usuario actual
+    const perfilActual = await this.getPerfil();
+    const idUsuario = perfilActual?.id_usuario || localStorage.getItem('userId');
+
+    if (!idUsuario) {
+      throw new Error('No se pudo determinar el ID del usuario en sesión.');
+    }
+
+    // 2. Mapear 'password' si viene del formulario
+    const payload: any = { ...data };
+    if (payload.password) {
+      payload.password = payload.password;
+    }
+
+    // 3. Enviar actualización vía PATCH a Django
+    const response = await this.api.patch(`/usuarios/${idUsuario}/`, payload);
+    return response.data;
+  }
+
   // ==================== PROYECTOS ====================
   async getProyectos() {
     const response = await this.api.get('/proyectos/');
@@ -231,10 +254,9 @@ class ApiService {
   }
 
   // ==================== HISTORIAL Y AUDITORÍA ====================
-  async getHistorialPresupuesto(proyectoId: number) {
-    const response = await this.api.get('/historial-presupuesto/', {
-      params: { proyecto: proyectoId },
-    });
+  async getHistorialPresupuesto(proyectoId?: number) {
+    const params = proyectoId ? { proyecto: proyectoId } : {};
+    const response = await this.api.get('/historial-presupuesto/', { params });
     return response.data;
   }
 
