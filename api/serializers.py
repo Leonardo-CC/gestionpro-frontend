@@ -160,19 +160,23 @@ class TareasSerializer(serializers.ModelSerializer):
         usuario_id = validated_data.pop('usuario_asignado', None)
         tarea = super().update(instance, validated_data)
 
-        if usuario_id:
+        if usuario_id is not None:
             try:
-                usuario_obj = Usuarios.objects.filter(id_usuario=str(usuario_id)).first()
-                if usuario_obj:
-                    Asignaciones.objects.update_or_create(
-                        tarea_id=instance.id_tarea,
-                        defaults={
-                            'usuario_id': usuario_obj.id_usuario,
-                            'horas_planificadas': tarea.horas_estimadas or 0
-                        }
-                    )
+                if usuario_id == "" or usuario_id == "None":
+                    # Si se seleccionó "Sin Asignar", borramos la asignación existente
+                    Asignaciones.objects.filter(tarea_id=instance.id_tarea).delete()
+                else:
+                    usuario_obj = Usuarios.objects.filter(id_usuario=str(usuario_id)).first()
+                    if usuario_obj:
+                        Asignaciones.objects.update_or_create(
+                            tarea_id=instance.id_tarea,
+                            defaults={
+                                'usuario_id': usuario_obj.id_usuario,
+                                'horas_planificadas': tarea.horas_estimadas or 0
+                            }
+                        )
             except Exception as e:
-                print(f"Error actualizando usuario asignado: {e}")
+                print(f"[SERIALIZER] Error actualizando asignación en tarea: {e}")
         return tarea
 
 

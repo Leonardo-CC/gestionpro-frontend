@@ -117,6 +117,28 @@ class AsignacionesViewSet(viewsets.ModelViewSet):
     serializer_class = AsignacionesSerializer
     permission_classes = [RoleBasedPermission]
 
+    def get_queryset(self):
+        queryset = Asignaciones.objects.all()
+        # Permitir filtrar asignaciones por ?tarea=ID
+        tarea_id = self.request.query_params.get('tarea') or self.request.query_params.get('id_tarea')
+        if tarea_id is not None and tarea_id != '':
+            queryset = queryset.filter(tarea_id=int(tarea_id))
+        return queryset
+
+    def perform_create(self, serializer):
+        tarea_obj = serializer.validated_data.get('tarea')
+        usuario_obj = serializer.validated_data.get('usuario')
+        if tarea_obj and usuario_obj:
+            # Evitar duplicados por tarea y actualizar o crear la asignación
+            Asignaciones.objects.update_or_create(
+                tarea_id=tarea_obj.id_tarea,
+                defaults={
+                    'usuario_id': usuario_obj.id_usuario,
+                    'horas_planificadas': serializer.validated_data.get('horas_planificadas', tarea_obj.horas_estimadas or 0)
+                }
+            )
+        else:
+            serializer.save()
 
 class ComentariosTareaViewSet(viewsets.ModelViewSet):
     serializer_class = ComentariosTareaSerializer
