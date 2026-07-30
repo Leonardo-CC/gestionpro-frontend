@@ -135,6 +135,58 @@ class ApiService {
     return response.data;
   }
 
+  async getProyectosAccesibles() {
+    try {
+      if (typeof window === 'undefined') return [];
+      
+      const userId = localStorage.getItem('userId');
+      const userRole = localStorage.getItem('userRole');
+      
+      if (!userId) return [];
+
+      // Get all projects
+      const allProyectos = await this.getProyectos();
+      
+      // If admin, show all projects
+      if (userRole === 'Administrador') {
+        return allProyectos;
+      }
+
+      if (!Array.isArray(allProyectos)) return [];
+
+      // If Gerente_Proyecto or Miembro, filter by:
+      // 1. Projects where they are the manager (id_gerente)
+      // 2. Projects where they have tasks assigned
+      const tareas = await this.getTareas();
+      const asignaciones = await this.getAsignaciones();
+
+      const projectIdsFromTasks = new Set<number>();
+      
+      if (Array.isArray(asignaciones)) {
+        asignaciones.forEach((asignacion: any) => {
+          if (String(asignacion.usuario_id || asignacion.usuario) === String(userId)) {
+            const tareaAsignada = tareas.find((t: any) => 
+              Number(t.id_tarea) === Number(asignacion.tarea_id || asignacion.tarea)
+            );
+            if (tareaAsignada) {
+              projectIdsFromTasks.add(Number(tareaAsignada.id_proyecto));
+            }
+          }
+        });
+      }
+
+      // Filter projects: manager OR has task assignment
+      return allProyectos.filter((proyecto: any) => {
+        const isManager = String(proyecto.id_gerente) === String(userId);
+        const hasTaskAssignment = projectIdsFromTasks.has(Number(proyecto.id_proyecto));
+        return isManager || hasTaskAssignment;
+      });
+    } catch (error) {
+      console.error('Error fetching accessible projects:', error);
+      return [];
+    }
+  }
+
   async getProyecto(id: number) {
     const response = await this.api.get(`/proyectos/${id}/`);
     return response.data;

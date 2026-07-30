@@ -22,7 +22,7 @@ interface Proyecto {
 }
 
 export default function ProyectosPage() {
-  const { data: proyectos = [], mutate: mutateProyectos } = useSWR('/proyectos', () => api.getProyectos(), {
+  const { data: proyectos = [], mutate: mutateProyectos } = useSWR('/proyectosAccesibles', () => api.getProyectosAccesibles(), {
     revalidateOnFocus: false,
   });
   const { data: usuarios = [] } = useSWR('/usuarios', () => api.getUsuarios(), {
