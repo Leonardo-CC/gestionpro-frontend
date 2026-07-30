@@ -125,20 +125,31 @@ class AsignacionesViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(tarea_id=int(tarea_id))
         return queryset
 
-    def perform_create(self, serializer):
-        tarea_obj = serializer.validated_data.get('tarea')
-        usuario_obj = serializer.validated_data.get('usuario')
-        if tarea_obj and usuario_obj:
-            # Evitar duplicados por tarea y actualizar o crear la asignación
-            Asignaciones.objects.update_or_create(
-                tarea_id=tarea_obj.id_tarea,
+    def create(self, request, *args, **kwargs):
+        data = request.data
+        tarea_id = data.get('tarea') or data.get('tarea_id') or data.get('id_tarea')
+        usuario_id = data.get('usuario') or data.get('usuario_id') or data.get('id_usuario')
+        horas = data.get('horas_planificadas', 0)
+
+        if not tarea_id or not usuario_id:
+            return Response(
+                {"error": "Los campos 'tarea' y 'usuario' son obligatorios."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            asignacion, created = Asignaciones.objects.update_or_create(
+                tarea_id=int(tarea_id),
                 defaults={
-                    'usuario_id': usuario_obj.id_usuario,
-                    'horas_planificadas': serializer.validated_data.get('horas_planificadas', tarea_obj.horas_estimadas or 0)
+                    'usuario_id': str(usuario_id),
+                    'horas_planificadas': float(horas) if horas else 0.0
                 }
             )
-        else:
-            serializer.save()
+            serializer = self.get_serializer(asignacion)
+            status_code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+            return Response(serializer.data, status=status_code)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 class ComentariosTareaViewSet(viewsets.ModelViewSet):
     serializer_class = ComentariosTareaSerializer
