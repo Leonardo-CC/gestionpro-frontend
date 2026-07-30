@@ -22,21 +22,26 @@ interface TareaDetailModalProps {
 }
 
 export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSuccess }: TareaDetailModalProps) {
-  // 1. Extraer ID de manera segura (Regla de Hooks)
   const tareaId = isOpen && tarea ? tarea.id_tarea : null;
 
-  // 🔒 Identificación de Rol y Permisos
   const [userRole, setUserRole] = useState<string>('');
   useEffect(() => {
     setUserRole(localStorage.getItem('userRole') || 'Miembro_Equipo');
   }, []);
   const isManagerOrAdmin = userRole === 'Administrador' || userRole === 'Gerente_Proyecto';
 
-  // 👥 Cargar SIEMPRE la lista general de Usuarios para mapear UUIDs a nombres reales
+  // Cargar lista general de Usuarios
   const { data: rawUsuarios = [] } = useSWR(tareaId ? '/usuarios' : null, () => api.getUsuarios(), { revalidateOnFocus: false });
   const usuarios = Array.isArray(rawUsuarios) ? rawUsuarios : [];
 
-  // 💡 HELPER DE RESOLUCIÓN EN CLIENTE: Convierte UUIDs en Nombres Reales
+  // Cargar Asignaciones reales de la base de datos
+  const { data: rawAsignaciones = [], mutate: mutateAsignaciones } = useSWR(
+    tareaId ? `/asignaciones/?tarea=${tareaId}` : null,
+    () => api.getAsignaciones ? api.getAsignaciones() : [],
+    { revalidateOnFocus: false }
+  );
+
+  // Helper de resolución de nombres en cliente
   const resolverNombreEnCliente = (idUsuarioRaw: any, nombreApi?: string) => {
     if (nombreApi && !['Desarrollador', 'Sin asignar', 'Sin Asignar', 'Usuario', 'Miembro del Equipo'].includes(nombreApi)) {
       return nombreApi;
@@ -45,7 +50,7 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
     if (!idUsuarioRaw) return 'Sin asignar';
 
     const uuidStr = typeof idUsuarioRaw === 'object' 
-      ? String(idUsuarioRaw.id_usuario || idUsuarioRaw.id || '') 
+      ? String(idUsuarioRaw.id_usuario || idUsuarioRaw.usuario_id || idUsuarioRaw.id || '') 
       : String(idUsuarioRaw);
 
     const usrEncontrado = usuarios.find((u: any) => String(u.id_usuario) === uuidStr || String(u.id) === uuidStr);
@@ -57,7 +62,7 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
     return 'Usuario Registrado';
   };
 
-  // 2. Declaración de Hooks SWR
+  // Peticiones SWR
   const { data: rawComentarios = [], mutate: mutateComentarios } = useSWR(
     tareaId ? `/comentarios/?tarea=${tareaId}` : null,
     () => (tareaId ? api.getComentarios(tareaId) : []),
@@ -76,7 +81,7 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
     { revalidateOnFocus: false }
   );
 
-  // 🔒 FILTRADO ESTRICTO DE CLIENTE PARA EVITAR MEZCLA DE DATOS DE OTRAS TAREAS
+  // Filtrado de cliente
   const comentarios = Array.isArray(rawComentarios)
     ? rawComentarios.filter((c: any) => {
         const itemTareaId = typeof c.id_tarea === 'object' ? c.id_tarea?.id_tarea : c.id_tarea;
@@ -104,20 +109,25 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Estados para Edición Gerencial (Estado y Responsable)
   const [nuevoEstado, setNuevoEstado] = useState<string>('');
   const [nuevoResponsableId, setNuevoResponsableId] = useState<string>('');
+
+  // Identificar responsable asignado real desde la tabla public.asignaciones
+  const asignacionActiva = Array.isArray(rawAsignaciones) 
+    ? rawAsignaciones.find((a: any) => Number(a.tarea_id || a.id_tarea) === Number(tareaId)) 
+    : null;
+
+  const idResponsableReal = asignacionActiva ? (asignacionActiva.usuario_id || asignacionActiva.id_usuario) : tarea?.usuario_asignado;
 
   useEffect(() => {
     if (tarea) {
       setNuevoEstado(tarea.estado || 'POR_HACER');
-      setNuevoResponsableId(tarea.usuario_asignado || '');
+      setNuevoResponsableId(idResponsableReal ? String(idResponsableReal) : '');
     }
-  }, [tarea]);
+  }, [tarea, idResponsableReal]);
 
   if (!isOpen || !tarea) return null;
 
-  // 💡 HELPER VISUAL: Convierte minutos enteros a formato limpio
   const formatTiempoHumano = (totalMinutos: number) => {
     if (!totalMinutos || totalMinutos <= 0) return '0m';
     const hrs = Math.floor(totalMinutos / 60);
@@ -143,10 +153,8 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
   const diferenciaHorasDecimal = estimadasDecimal - totalHorasInvertidasDecimal;
   const esEficiente = diferenciaHorasDecimal >= 0;
 
-  // Responsable resuelto en cliente
-  const responsableActualNombre = resolverNombreEnCliente(tarea.usuario_asignado, tarea.responsable_nombre);
+  const responsableActualNombre = resolverNombreEnCliente(idResponsableReal, tarea.responsable_nombre);
 
-  // 💡 UNIFICACIÓN DE EVENTOS EN LA BITÁCORA
   const bitacoraUnificada = (() => {
     const lista: any[] = [];
 
@@ -169,7 +177,7 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
         lista.push({
           id: `hrs-${r.id_registro || r.id}`,
           autor: resolverNombreEnCliente(r.id_usuario, r.usuario_nombre),
-          texto: r.comentario || `⏱️ Se registró un tiempo de +${formatDecimalAHumano(hrsNum)} de trabajo.`,
+          texto: r.comentario || `Se registró un tiempo de +${formatDecimalAHumano(hrsNum)} de trabajo.`,
           fecha: r.fecha_creacion ? new Date(r.fecha_creacion) : new Date(r.fecha),
         });
       }
@@ -229,15 +237,22 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
     }
   };
 
-  // 👑 GUARDAR CAMBIOS DE GESTIÓN GERENCIAL (Estado y Reasignación)
+  // Guardar Cambios Gerenciales
   const handleGuardarGestionGerencial = async () => {
     try {
       setLoading(true);
-      const payload: any = { estado: nuevoEstado };
-      if (nuevoResponsableId) {
-        payload.usuario_asignado = nuevoResponsableId;
-      }
+      setError('');
+
+      const payload: any = { 
+        estado: nuevoEstado,
+        usuario_asignado: nuevoResponsableId || null 
+      };
+
       await api.updateTarea(tarea.id_tarea, payload);
+
+      mutateAsignaciones();
+      mutateComentarios();
+      
       if (onUpdateSuccess) onUpdateSuccess();
       onClose();
     } catch (err) {
@@ -262,7 +277,7 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
       <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl text-slate-100 overflow-hidden">
         
-        {/* Encabezado */}
+        {/* Encabezado sin emojis */}
         <div className="p-5 border-b border-slate-800 flex items-center justify-between bg-slate-950/50">
           <div>
             <div className="flex items-center gap-2">
@@ -294,8 +309,8 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
 
             {/* FORMULARIO DE REGISTRO */}
             <form onSubmit={handleRegistrarAvanceCompleto} className="bg-slate-950 p-5 rounded-xl border border-blue-500/30 shadow-lg space-y-4">
-              <h3 className="text-xs font-bold text-blue-400 uppercase tracking-wider flex items-center gap-2">
-                <span>⚡</span> Publicar Nuevo Avance con Evidencia
+              <h3 className="text-xs font-bold text-blue-400 uppercase tracking-wider">
+                Publicar Nuevo Avance con Evidencia
               </h3>
 
               {error && <div className="p-2 bg-rose-500/10 border border-rose-500/20 rounded text-rose-400 text-xs">{error}</div>}
@@ -315,7 +330,7 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2 bg-slate-900/60 p-3 rounded-lg border border-slate-800">
                   <div className="flex justify-between items-center">
-                    <label className="block text-xs font-semibold text-slate-300">⏱️ Tiempo a Cargar</label>
+                    <label className="block text-xs font-semibold text-slate-300">Tiempo a Cargar</label>
                     <span className="text-xs font-bold font-mono text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">
                       {formatTiempoHumano(minutosAHoras)}
                     </span>
@@ -336,7 +351,7 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">📎 Adjuntar Evidencia (Captura/PDF)</label>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Adjuntar Evidencia (Captura/PDF)</label>
                   <input
                     type="file"
                     onChange={(e) => setArchivoEvidencia(e.target.files?.[0] || null)}
@@ -365,7 +380,7 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
                   bitacoraUnificada.map((item: any) => (
                     <div key={item.id} className="p-3.5 bg-slate-950/80 rounded-xl border border-slate-800 space-y-2 text-xs">
                       <div className="flex items-center justify-between text-slate-400">
-                        <span className="font-bold text-slate-200">👤 {item.autor}</span>
+                        <span className="font-bold text-slate-200">{item.autor}</span>
                         <span className="text-[10px]">{item.fecha.toLocaleString()}</span>
                       </div>
                       <p className="text-slate-300 font-medium whitespace-pre-line">{item.texto}</p>
@@ -382,7 +397,7 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
           {/* COLUMNA DERECHA: Control de Tiempo, Evidencias & Gestión Gerencial */}
           <div className="space-y-6">
             
-            {/* 👑 BLOQUE DE GESTIÓN GERENCIAL (CAMBIO DE RESPONSABLE Y ESTADO) */}
+            {/* BLOQUE DE GESTIÓN GERENCIAL */}
             {isManagerOrAdmin && (
               <div className="bg-slate-950 p-4 rounded-xl border border-blue-500/40 space-y-3">
                 <h4 className="text-xs font-bold text-blue-400 uppercase tracking-wider">Gestión de Tarea (Gerencia)</h4>
@@ -469,20 +484,18 @@ export default function TareaDetailModal({ tarea, isOpen, onClose, onUpdateSucce
             {/* EVIDENCIAS ADJUNTAS */}
             <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
               <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-                <span>📁 Evidencias Adjuntas</span>
+                <span>Evidencias Adjuntas</span>
                 <span className="text-[10px] text-blue-400 font-mono font-normal">({archivos.length})</span>
               </h4>
 
               <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
                 {archivos.length > 0 ? (
                   archivos.map((arc: any) => {
-                    const esImagen = arc.archivo?.match(/\.(jpg|jpeg|png|gif|webp)$/i) || arc.nombre_archivo?.match(/\.(jpg|jpeg|png|gif|webp)$/i);
                     const urlDescarga = arc.archivo || arc.url_archivo;
 
                     return (
                       <div key={arc.id_archivo || arc.id} className="p-2.5 bg-slate-900/90 rounded-lg border border-slate-800 flex items-center justify-between gap-2 text-xs">
                         <div className="flex items-center gap-2 overflow-hidden">
-                          <span className="text-base">{esImagen ? '🖼️' : '📄'}</span>
                           <div className="truncate">
                             <a
                               href={urlDescarga}
