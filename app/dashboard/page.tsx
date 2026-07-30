@@ -74,59 +74,65 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {/* 📊 TARJETAS DE MÉTRICAS ADAPTATIVAS */}
+      {/* 📊 TARJETAS DE MÉTRICAS CON SUS BORDES Y ESTILOS DE COLOR */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         
         {isMiembro ? (
           <>
-            {/* Métricas para Miembro de Equipo */}
-            <div className="bg-slate-900/60 border border-slate-800 p-5 rounded-2xl shadow-lg">
+            {/* Tareas Pendientes (Azul Slate) */}
+            <div className="bg-slate-900/60 border-l-4 border-l-blue-500 border border-slate-800 p-5 rounded-2xl shadow-lg backdrop-blur-sm">
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Tareas Pendientes</span>
-              <p className="text-3xl font-black text-white mt-2">{tareasPendientes.length}</p>
+              <p className="text-3xl font-black text-white mt-2 font-mono">{tareasPendientes.length}</p>
             </div>
 
-            <div className="bg-slate-900/60 border border-slate-800 p-5 rounded-2xl shadow-lg">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-blue-400">En Desarrollo Hoy</span>
-              <p className="text-3xl font-black text-blue-400 mt-2">{tareasEnProceso.length}</p>
+            {/* En Desarrollo Hoy (Azul Vivo) */}
+            <div className="bg-slate-900/60 border-l-4 border-l-cyan-400 border border-slate-800 p-5 rounded-2xl shadow-lg backdrop-blur-sm">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-cyan-400">En Desarrollo Hoy</span>
+              <p className="text-3xl font-black text-cyan-400 mt-2 font-mono">{tareasEnProceso.length}</p>
             </div>
 
-            <div className="bg-slate-900/60 border border-slate-800 p-5 rounded-2xl shadow-lg">
+            {/* Horas Imputadas (Púrpura) */}
+            <div className="bg-slate-900/60 border-l-4 border-l-purple-500 border border-slate-800 p-5 rounded-2xl shadow-lg backdrop-blur-sm">
               <span className="text-[11px] font-bold uppercase tracking-wider text-purple-400">Horas Imputadas</span>
-              <p className="text-3xl font-black text-purple-400 mt-2">{misHorasTotales} hrs</p>
+              <p className="text-3xl font-black text-purple-400 mt-2 font-mono">{misHorasTotales} hrs</p>
             </div>
 
-            <div className="bg-slate-900/60 border border-slate-800 p-5 rounded-2xl shadow-lg">
+            {/* Proyectos Activos (Esmeralda) */}
+            <div className="bg-slate-900/60 border-l-4 border-l-emerald-500 border border-slate-800 p-5 rounded-2xl shadow-lg backdrop-blur-sm">
               <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">Proyectos Activos</span>
-              <p className="text-3xl font-black text-emerald-400 mt-2">
+              <p className="text-3xl font-black text-emerald-400 mt-2 font-mono">
                 {Array.isArray(proyectos) ? proyectos.filter((p: Proyecto) => p.estado === 'Activo').length : 0}
               </p>
             </div>
           </>
         ) : (
           <>
-            {/* Métricas para Gerente / Admin / Ejecutivo */}
-            <div className="bg-slate-900/60 border border-slate-800 p-5 rounded-2xl shadow-lg">
+            {/* 👑 TOTAL PROYECTOS (Borde Azul Principal) */}
+            <div className="bg-slate-900/60 border-l-4 border-l-blue-500 border border-slate-800 p-5 rounded-2xl shadow-lg backdrop-blur-sm">
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Proyectos</span>
-              <p className="text-3xl font-black text-white mt-2">{proyectos.length}</p>
+              <p className="text-3xl font-black text-white mt-2 font-mono">{proyectos.length}</p>
             </div>
 
-            <div className="bg-slate-900/60 border border-slate-800 p-5 rounded-2xl shadow-lg">
+            {/* 👑 PROYECTOS ACTIVOS (Borde Esmeralda Verde) */}
+            <div className="bg-slate-900/60 border-l-4 border-l-emerald-400 border border-slate-800 p-5 rounded-2xl shadow-lg backdrop-blur-sm">
               <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">Proyectos Activos</span>
-              <p className="text-3xl font-black text-emerald-400 mt-2">
+              <p className="text-3xl font-black text-emerald-400 mt-2 font-mono">
                 {Array.isArray(proyectos) ? proyectos.filter((p: Proyecto) => p.estado === 'Activo').length : 0}
               </p>
             </div>
 
-            <div className="bg-slate-900/60 border border-slate-800 p-5 rounded-2xl shadow-lg">
+            {/* 👑 PRESUPUESTO ACUMULADO (Borde Azul Rey) */}
+            <div className="bg-slate-900/60 border-l-4 border-l-blue-400 border border-slate-800 p-5 rounded-2xl shadow-lg backdrop-blur-sm">
               <span className="text-[11px] font-bold uppercase tracking-wider text-blue-400">Presupuesto Acumulado</span>
-              <p className="text-2xl font-black text-blue-400 mt-2">
+              <p className="text-2xl font-black text-blue-400 mt-2 font-mono">
                 Bs. {presupuestoAcumulado.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
               </p>
             </div>
 
-            <div className="bg-slate-900/60 border border-slate-800 p-5 rounded-2xl shadow-lg">
+            {/* 👑 HORAS INVERTIDAS (Borde Púrpura) */}
+            <div className="bg-slate-900/60 border-l-4 border-l-purple-500 border border-slate-800 p-5 rounded-2xl shadow-lg backdrop-blur-sm">
               <span className="text-[11px] font-bold uppercase tracking-wider text-purple-400">Horas Invertidas</span>
-              <p className="text-3xl font-black text-purple-400 mt-2">{misHorasTotales} hrs</p>
+              <p className="text-3xl font-black text-purple-400 mt-2 font-mono">{misHorasTotales} hrs</p>
             </div>
           </>
         )}
@@ -190,7 +196,7 @@ export default function DashboardPage() {
                 {proyectos.slice(0, 4).map((proyecto: Proyecto) => (
                   <div
                     key={proyecto.id_proyecto}
-                    className="p-3.5 bg-slate-950/60 border border-slate-800/80 rounded-xl flex items-center justify-between"
+                    className="p-3.5 bg-slate-950/60 border border-slate-800/80 rounded-xl flex items-center justify-between hover:border-slate-700 transition-colors"
                   >
                     <div>
                       <h3 className="text-xs font-bold text-slate-200">{proyecto.nombre}</h3>
@@ -199,7 +205,7 @@ export default function DashboardPage() {
                       </p>
                     </div>
 
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase">
+                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase tracking-wider">
                       {proyecto.estado}
                     </span>
                   </div>
